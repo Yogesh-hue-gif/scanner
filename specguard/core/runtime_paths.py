@@ -68,10 +68,35 @@ def get_data_dir(subdir: str = "") -> Path:
     return target
 
 
+#: Environment-variable overrides for each bundled resource directory.
+#: These let the offline Conda-Pack deployment point SpecGuard at an explicit
+#: layout (app\models, app\rules, ...) without any code change and without
+#: hard-coding a developer-specific path.
+RESOURCE_ENV_VARS = {
+    "models":    ("SPECGUARD_MODELS_DIR", "DOCREADY_MODELS_DIR"),
+    "rules":     ("SPECGUARD_RULES_DIR", "DOCREADY_RULES_DIR"),
+    "standards": ("SPECGUARD_STANDARDS_DIR", "DOCREADY_STANDARDS_DIR"),
+    "templates": ("SPECGUARD_TEMPLATES_DIR", "DOCREADY_TEMPLATES_DIR"),
+    "web":       ("SPECGUARD_WEB_DIR", "DOCREADY_WEB_DIR"),
+    "static":    ("SPECGUARD_STATIC_DIR", "DOCREADY_STATIC_DIR"),
+    "demo_samples": ("SPECGUARD_DEMO_SAMPLES_DIR", "DOCREADY_DEMO_SAMPLES_DIR"),
+}
+
+
 def get_resource_dir(resource_name: str) -> Path:
     """
     Locates an application resource directory (models, standards, templates, web, etc.).
+
+    Resolution order:
+      1. An explicit environment override (see RESOURCE_ENV_VARS) — used by the
+         offline Conda-Pack deployment.
+      2. Conventional locations relative to the application root.
     """
+    for var in RESOURCE_ENV_VARS.get(resource_name, ()):
+        override = os.environ.get(var)
+        if override and Path(override).is_dir():
+            return Path(override).resolve()
+
     app_dir = get_app_dir()
     candidates = [
         app_dir / resource_name,
@@ -146,7 +171,17 @@ def get_uploads_dir() -> Path:
 
 
 def get_web_dir() -> Path:
-    """Locates the web frontend directory (static, templates)."""
+    """
+    Locates the web frontend directory (static, templates).
+
+    Honours the SPECGUARD_WEB_DIR / DOCREADY_WEB_DIR override used by the
+    offline Conda-Pack deployment before falling back to conventional locations.
+    """
+    for var in RESOURCE_ENV_VARS["web"]:
+        override = os.environ.get(var)
+        if override and Path(override).is_dir():
+            return Path(override).resolve()
+
     app_dir = get_app_dir()
     candidates = [
         app_dir / "specguard" / "web",

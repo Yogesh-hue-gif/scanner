@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -115,6 +115,56 @@ def create_app() -> FastAPI:
             "offline": True,
             "lan_ready": True
         }
+
+    @app.get("/health/ready")
+    def health_ready():
+        """
+        Readiness probe for offline/air-gapped deployments.
+
+        Reports whether every bundled resource the inspection pipeline needs is
+        present and reachable. Performs strictly local filesystem checks only -
+        no network calls, no external services.
+        """
+        from specguard.core.config import (
+            DB_PATH, DATA_DIR, RULES_DIR, MODELS_DIR, STANDARDS_DIR, TEMPLATES_DIR,
+        )
+
+        def _readable(p: Path) -> bool:
+            try:
+                return p.exists() and os.access(p, os.R_OK)
+            except OSError:
+                return False
+
+        def _has_files(p: Path) -> bool:
+            try:
+                return p.is_dir() and any(f.is_file() for f in p.rglob("*"))
+            except OSError:
+                return False
+
+        components = {
+            "database": _readable(DB_PATH.parent),
+            "data_storage": DATA_DIR.exists() and os.access(DATA_DIR, os.W_OK),
+            "rules": _has_files(RULES_DIR),
+            "standards": _has_files(STANDARDS_DIR),
+            "templates": _has_files(TEMPLATES_DIR),
+            "models_dir": _readable(MODELS_DIR),
+            "web_ui": (WEB_DIR / "templates" / "index.html").exists(),
+        }
+        is_ready = all(components.values())
+
+        return JSONResponse(
+            status_code=200 if is_ready else 503,
+            content={
+                "status": "ready" if is_ready else "not_ready",
+                "ready": is_ready,
+                "name": "SpecGuard",
+                "service": "docready",
+                "version": DEFAULT_CONFIG.version,
+                "environment": env_mode,
+                "offline": True,
+                "components": components,
+            },
+        )
 
     @app.get("/api/health")
     def api_health_check():
