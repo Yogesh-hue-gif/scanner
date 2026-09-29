@@ -1,7 +1,7 @@
 # ==============================================================================
 # DocReady — Render Infrastructure as Code (Blueprint)
 # ==============================================================================
-# Deploy to Render via Blueprint (Native Python or Docker container)
+# Deploy to Render via Blueprint (Native Python)
 # ==============================================================================
 
 services:

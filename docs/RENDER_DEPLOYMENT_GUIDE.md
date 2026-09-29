@@ -22,16 +22,16 @@ DocReady is originally architected as an offline-first desktop/intranet system. 
 
 ## 2. Deployment Architecture
 
-DocReady supports two deployment modes on Render:
+DocReady is deployed as a Native Python Web Service on Render:
 
-| Feature | Option A: Native Python Web Service (Recommended) | Option B: Docker Container |
-| :--- | :--- | :--- |
-| **Best For** | Fastest build time (~1.5 min), zero container overhead | Native Tesseract OCR binary bundled |
-| **Build Command** | `pip install --upgrade pip && pip install -r requirements-render.txt` | Automatically builds from `Dockerfile` |
-| **Start Command** | `uvicorn specguard.server.app:create_app --factory --host 0.0.0.0 --port $PORT --workers 1` | Defined in Dockerfile `CMD` |
-| **System Packages** | Uses pre-built Linux wheels (`opencv-python-headless`, `pymupdf`) | Bundles `tesseract-ocr` & `tesseract-ocr-eng` |
-| **OCR Fallback** | OpenCV Morphological Vision Engine (Built-in) | Hybrid OpenCV + Tesseract OCR |
-| **Free Tier Ready** | Yes | Yes |
+| Feature | Native Python Web Service |
+| :--- | :--- |
+| **Best For** | Fastest build time (~1.5 min), zero container overhead |
+| **Build Command** | `pip install --upgrade pip && pip install -r requirements-render.txt` |
+| **Start Command** | `uvicorn specguard.server.app:create_app --factory --host 0.0.0.0 --port $PORT --workers 1` |
+| **System Packages** | Uses pre-built Linux wheels (`opencv-python-headless`, `pymupdf`) |
+| **OCR Fallback** | OpenCV Morphological Vision Engine (Built-in) |
+| **Free Tier Ready** | Yes |
 
 ---
 
@@ -72,17 +72,6 @@ Under **Advanced Settings**:
 - **Health Check Path**: `/health`
 
 Click **Create Web Service**. Render will install dependencies and start DocReady.
-
----
-
-## 4. Option B: Docker Container Deployment
-
-If you require the system Tesseract OCR binary:
-1. In Render, select **Runtime: Docker**.
-2. **Dockerfile Path**: `./Dockerfile`.
-3. Set the identical Environment Variables as above (`DOCREADY_ENV=render_demo`, `DOCREADY_WEB_MODE=1`).
-4. Set **Health Check Path**: `/health`.
-5. Click **Create Web Service**.
 
 ---
 

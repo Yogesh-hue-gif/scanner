@@ -16,7 +16,6 @@ scanner/
 ├── app.py                         # Application CLI & Web server entry point
 ├── run_web.py                     # Convenience web launcher
 ├── pyproject.toml                 # Packaging metadata, scripts, and runtime dependencies
-├── Dockerfile                     # [To be generated] Container definition for cloud/Render deployment
 ├── render.yaml                    # [To be generated] Infrastructure-as-code deployment blueprint
 ├── .env.example                   # [To be generated] Documented environment variables template
 ├── specguard/                     # Core application package (DocReady backend & engine)
@@ -205,8 +204,8 @@ The dependencies can be categorized into web runtime, document processing, compu
    - Create a clean `requirements-render.txt` with exact web/analysis requirements (`pymupdf`, `opencv-python-headless`, `python-docx`, `openpyxl`, `fastapi`, `uvicorn`, etc.) without `PySide6`.
 5. **Configurable Data Directory (`specguard/core/runtime_paths.py`):**
    - Enhance `get_data_dir()` to honor `DOCREADY_DATA_DIR` if set in the environment, enabling persistence via Render Persistent Disks if attached.
-6. **Dual Deployment Support (Docker & Native Python):**
-   - Provide a lean `Dockerfile` (with Tesseract OCR installed) and a `render.yaml` supporting both native Python and Docker configurations.
+6. **Native Python Deployment Support:**
+   - Provide `render.yaml` supporting native Python deployment.
 
 ---
 
@@ -238,7 +237,7 @@ The dependencies can be categorized into web runtime, document processing, compu
 - **PySide6 Desktop GUI:** Disabled by design in cloud environments.
 - **Hardware GPU Acceleration (MPS/CUDA):** Render starter/free tiers run on CPU instances; all PyTorch/ONNX inferences will run on multi-core CPU.
 - **Long-term File Persistence (Free Tier):** Uploaded files and generated reports are stored on the ephemeral container disk and will be cleared when the free service spins down after inactivity.
-- **System Tesseract OCR (Native Python Mode):** If deployed via native Python without Docker, Tesseract binary is absent; the system automatically falls back to the built-in OpenCV morphological document vision engine.
+- **System Tesseract OCR:** If Tesseract binary is absent in the runtime environment, the system automatically falls back to the built-in OpenCV morphological document vision engine.
 
 ---
 

@@ -75,9 +75,7 @@ Existing test suites were run to ensure total backward compatibility with the de
 
 ### Newly Created Deployment Artifacts
 1. `requirements-render.txt` — Dedicated production requirements for headless web deployment (excludes `PySide6` and `pyinstaller`).
-2. `Dockerfile` — Production multi-stage Docker container with Tesseract OCR support.
-3. `.dockerignore` — Excludes build artifacts, virtual environments, and temporary files from container builds.
-4. `render.yaml` — Declarative Render blueprint configuration for one-click deployment.
+2. `render.yaml` — Declarative Render blueprint configuration for one-click deployment.
 5. `.env.example` — Template documenting all runtime environment variables.
 6. `docs/RENDER_READINESS_AUDIT.md` — Full 10-point architectural audit report.
 7. `docs/RENDER_DEPLOYMENT_GUIDE.md` — Step-by-step deployment guide.

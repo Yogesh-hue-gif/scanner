@@ -128,7 +128,6 @@ Pre-generated synthetic engineering test documents containing realistic deviatio
 ├── app.py                      # Web application server entry point (FastAPI + Uvicorn)
 ├── run_web.py                  # Convenience web runner
 ├── pyproject.toml              # Dependencies & packaging metadata
-├── Dockerfile                  # Container definition for web deployment
 ├── render.yaml                 # Render infrastructure configuration
 ├── specguard/
 │   ├── analyzers/              # 16+ pure Python analysis & severity modules
