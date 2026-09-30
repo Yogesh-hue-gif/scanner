@@ -11,7 +11,7 @@ If SpecGuard does not launch or behave as expected:
 1. **Check the Log File:**
    Open:
    ```
-   data/logs/docready.log (or data/logs/specguard.log)
+   data/logs/specguard.log
    ```
    This file records detailed technical exceptions, environment checks, and startup events.
 
@@ -23,7 +23,7 @@ If SpecGuard does not launch or behave as expected:
 3. **Verify Python Environment:**
    Ensure Python 3.9+ is active and dependencies are installed:
    ```bash
-   pip install -r requirements-render.txt
+   pip install -r requirements-conda.txt
    ```
 
 ---

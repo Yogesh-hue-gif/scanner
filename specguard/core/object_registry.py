@@ -1,5 +1,5 @@
 """
-Normalized Document Object Registry for DocReady.
+Normalized Document Object Registry for SpecGuard.
 Indexes all structured document objects (Sections, Headings, TOC entries, Figures,
 Tables, Equations, References) with stable IDs and fast bi-directional lookup.
 """

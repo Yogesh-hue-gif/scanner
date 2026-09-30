@@ -272,32 +272,69 @@ class DocumentParser:
             try:
                 drawings = fitz_page.get_drawings()
                 if drawings:
-                    # Group drawings into clusters if they cover significant area
-                    drawing_rects = [d.get("rect") for d in drawings if d.get("rect")]
-                    if drawing_rects:
-                        min_x = min(r[0] for r in drawing_rects)
-                        min_y = min(r[1] for r in drawing_rects)
-                        max_x = max(r[2] for r in drawing_rects)
-                        max_y = max(r[3] for r in drawing_rects)
-                        dw = max_x - min_x
-                        dh = max_y - min_y
-                        # Only consider as a figure if it spans a meaningful diagram area and isn't a simple underline/rule
-                        if dw > 60.0 and dh > 40.0:
-                            # Avoid duplicate if it overlaps with an existing table or image
-                            is_table_border = any(
-                                t.bbox and (min_y >= t.bbox.y0 - 5.0 and max_y <= t.bbox.y1 + 5.0)
-                                for t in tables
-                            )
-                            if not is_table_border:
-                                figures.append(FigureData(
-                                    bbox=BBox(x0=min_x, y0=min_y, x1=max_x, y1=max_y),
-                                    page_num=page_num,
-                                    figure_type="vector",
-                                    figure_id=f"fig_p{page_num}_{len(figures) + 1}",
-                                    confidence=0.90
-                                ))
+                    # Filter out header rules, footer lines, and full-page border boxes
+                    valid_rects = []
+                    for d in drawings:
+                        r = d.get("rect")
+                        if not r:
+                            continue
+                        rx0, ry0, rx1, ry1 = float(r[0]), float(r[1]), float(r[2]), float(r[3])
+                        rw, rh = rx1 - rx0, ry1 - ry0
+                        # Ignore header/footer lines and page boundary borders
+                        if ry1 <= page_h * 0.07 or ry0 >= page_h * 0.93:
+                            continue
+                        if rw >= page_w * 0.85 and rh >= page_h * 0.85:
+                            continue
+                        valid_rects.append((rx0, ry0, rx1, ry1))
+
+                    if valid_rects:
+                        # Cluster rects by proximity
+                        clusters: List[List[Tuple[float, float, float, float]]] = []
+                        for rect_item in valid_rects:
+                            assigned = False
+                            for clus in clusters:
+                                # Check overlap or close proximity (< 25pt)
+                                clus_x0 = min(c[0] for c in clus)
+                                clus_y0 = min(c[1] for c in clus)
+                                clus_x1 = max(c[2] for c in clus)
+                                clus_y1 = max(c[3] for c in clus)
+                                if not (rect_item[2] < clus_x0 - 25 or rect_item[0] > clus_x1 + 25 or
+                                        rect_item[3] < clus_y0 - 25 or rect_item[1] > clus_y1 + 25):
+                                    clus.append(rect_item)
+                                    assigned = True
+                                    break
+                            if not assigned:
+                                clusters.append([rect_item])
+
+                        for clus in clusters:
+                            cx0 = min(c[0] for c in clus)
+                            cy0 = min(c[1] for c in clus)
+                            cx1 = max(c[2] for c in clus)
+                            cy1 = max(c[3] for c in clus)
+                            cdw = cx1 - cx0
+                            cdh = cy1 - cy0
+
+                            # Ignore if box spans > 70% of page width and > 70% of page height (not a single figure)
+                            if cdw >= page_w * 0.70 and cdh >= page_h * 0.70:
+                                continue
+
+                            # Only consider as figure if localized diagram
+                            if cdw > 50.0 and cdh > 35.0:
+                                is_table_border = any(
+                                    t.bbox and (cy0 >= t.bbox.y0 - 5.0 and cy1 <= t.bbox.y1 + 5.0)
+                                    for t in tables
+                                )
+                                if not is_table_border:
+                                    figures.append(FigureData(
+                                        bbox=BBox(x0=cx0, y0=cy0, x1=cx1, y1=cy1),
+                                        page_num=page_num,
+                                        figure_type="vector",
+                                        figure_id=f"fig_p{page_num}_{len(figures) + 1}",
+                                        confidence=0.90
+                                    ))
             except Exception as d_err:
                 logger.debug("Vector drawings extraction error on page %d: %s", page_num, d_err)
+
 
             # Optional Deep CV analysis: only if deep_analysis is explicitly requested
             if deep_analysis:

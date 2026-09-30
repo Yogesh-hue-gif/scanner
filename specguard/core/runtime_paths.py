@@ -161,14 +161,20 @@ def get_web_dir() -> Path:
 def detect_tesseract() -> Optional[Path]:
     """
     Safely locates a local or system Tesseract OCR executable.
+    Supports Windows (.exe) and Unix/macOS, looking in bundled runtime/tesseract first.
     Does NOT require Tesseract for normal operation (OpenCV morphological engine is built-in).
     """
     app_dir = get_app_dir()
     candidates: List[Path] = [
+        app_dir.parent / "runtime" / "tesseract" / "tesseract.exe",
+        app_dir.parent / "runtime" / "tesseract" / "tesseract",
+        app_dir / "runtime" / "tesseract" / "tesseract.exe",
+        app_dir / "runtime" / "tesseract" / "tesseract",
+        app_dir / "tesseract" / "tesseract.exe",
         app_dir / "tesseract" / "tesseract",
     ]
     for cand in candidates:
-        if cand.exists() and os.access(cand, os.X_OK):
+        if cand.exists():
             return cand
 
     # Check system PATH

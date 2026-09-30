@@ -29,7 +29,7 @@ from specguard.server.api.models_api import router as router_models
 from specguard.server.api.templates_api import router as router_templates
 from specguard.server.api.settings_api import router as router_settings
 
-logger = logging.getLogger("DocReady.Server")
+logger = logging.getLogger("SpecGuard.Server")
 
 STATIC_DIR = WEB_DIR / "static"
 TEMPLATES_DIR = WEB_DIR / "templates"
@@ -38,18 +38,18 @@ TEMPLATES_DIR = WEB_DIR / "templates"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager running pre-flight checks and clean shutdown."""
-    logger.info("Verifying local offline environment...")
+    logger.info("SpecGuard: Verifying local offline environment...")
     report = verify_environment()
     if not report.is_ready:
         logger.warning("Startup diagnostics reported issues: %s", report.errors)
     else:
         logger.info("Environment verified: 100% Offline Mode Active.")
     yield
-    logger.info("DocReady local server shutting down cleanly.")
+    logger.info("SpecGuard local server shutting down cleanly.")
 
 
 def create_app() -> FastAPI:
-    """Factory creating and configuring the DocReady FastAPI server."""
+    """Factory creating and configuring the SpecGuard FastAPI server."""
     app = FastAPI(
         title="SpecGuard — Engineering Document Quality & Compliance Inspection Platform",
         description="SpecGuard 100% Offline Document Intelligence & Compliance Inspection System",
@@ -60,23 +60,14 @@ def create_app() -> FastAPI:
     )
 
     import os
-    env_mode = os.environ.get("SPECGUARD_ENV") or os.environ.get("DOCREADY_ENV", "local").lower()
-    custom_cors = os.environ.get("SPECGUARD_CORS_ORIGINS") or os.environ.get("DOCREADY_CORS_ORIGINS")
+    env_mode = os.environ.get("SPECGUARD_ENV", "local").lower()
+    custom_cors = os.environ.get("SPECGUARD_CORS_ORIGINS")
 
     if custom_cors:
         origins = [orig.strip() for orig in custom_cors.split(",") if orig.strip()]
         app.add_middleware(
             CORSMiddleware,
             allow_origins=origins,
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-    elif env_mode in ["render_demo", "render", "web"]:
-        # In Render testing mode, allow *.onrender.com alongside localhost/intranet
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost|([a-zA-Z0-9-]+\.)*onrender\.com|([a-zA-Z0-9-]+\.)*local|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$",
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
@@ -148,7 +139,7 @@ def create_app() -> FastAPI:
             "status": "online",
             "mode": "offline",
             "name": "SpecGuard",
-            "service": "docready",
+            "service": "specguard",
             "environment": env_mode,
             "version": DEFAULT_CONFIG.version,
             "components": {

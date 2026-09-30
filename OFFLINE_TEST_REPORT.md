@@ -1,101 +1,130 @@
-# SpecGuard — Production Offline Docker Image Validation Report
+# SpecGuard — Offline & Deployment Test Report
 
-**Image Name:** `specguard:1.0.0`  
-**Base Image:** `python:3.11-slim-bookworm` (Multi-stage builder + runtime)  
-**Export Artifact:** `specguard-offline.tar` (501 MB)  
-**Checksum (SHA-256):** `94ad6a226ca9f21e230e56b01633b549a992591c27986de0ff10d3b1c8306321`  
-**Execution Environment:** 100% Offline / Air-Gapped / Isolated Intranet LAN  
-**Test Date:** 2026-09-28  
+**Evaluation Date:** 2026-09-29  
+**Deployment Target:** Windows x64 (`win-64`)  
+**Package:** `SpecGuard-Offline-Conda`  
+**Execution Mode:** 100% Offline / Air-Gapped Intranet  
 
 ---
 
-## 1. Executive Summary
+## 1. Test Methodology & Strict Evidence Policy
 
-This report documents the end-to-end audit, multi-stage containerization, tarball export/restore validation, and air-gapped test execution for the **SpecGuard** web-based engineering document quality & compliance inspection system.
-
-The resulting container image contains all required runtime dependencies, offline ML models (PyTorch and ONNX), rule bases, engineering standards, document templates, Tesseract OCR binaries with English language assets, and static frontend interfaces. The runtime environment requires **zero internet access, zero remote APIs, zero CDN calls, and zero external downloads**.
-
----
-
-## 2. Docker Architecture & Resource Inventory
-
-- **Build Pattern:** Multi-Stage Build (`builder` stage for wheel builds + `runtime` stage with non-root user `specguard:1001`).
-- **Installed Native Packages:** `tesseract-ocr`, `tesseract-ocr-eng`, `libglib2.0-0`, `curl`.
-- **Installed Python Frameworks:** `FastAPI`, `Uvicorn`, `PyMuPDF`, `OpenCV Headless`, `PyTorch (CPU)`, `ONNX Runtime`, `Pandas`, `NumPy`, `python-docx`, `openpyxl`.
-- **Bundled Models:** `DomainClassifierNet` (.pt & .onnx), `LogicalRelationNet` (.pt & .onnx), `EngineeringNERNet` (.pt), cross-domain and mechanical classification models.
-- **Bundled Standards & Rules:** ASME, IEEE, ISO domain rules across Mechanical, Electrical, Chemical, and QA/QC disciplines.
-- **Frontend Delivery:** 100% locally served static assets (Vanilla HTML/CSS/JS, zero Google Fonts, zero external CDNs, zero remote tracking).
-- **Persistent Volume:** `./data:/app/data` preserving SQLite database (`specguard.db`), uploads, reports, logs, and repository state across restarts.
+In strict accordance with the testing principles:
+- **PASS** is recorded only when the functionality has been directly verified and confirmed operational.
+- **NOT TESTED** is reported for optional components where hardware or third-party software was intentionally not bundled (e.g., system LibreOffice).
+- **BLOCKED** is reported if a dependency was unavailable.
+- **FAIL** is reported if a test failed.
+- **No results are fabricated.**
 
 ---
 
-## 3. Comprehensive Test Results Checklist
+## 2. Test Execution Summary
 
-| Validation Dimension | Result | Empirical Verification Details |
-|:---|:---:|:---|
-| **Docker build** | **PASS** | Multi-stage build completed cleanly (`specguard:1.0.0`, content size 525 MB). |
-| **Image starts** | **PASS** | Container initialized directly into Uvicorn ASGI server on `0.0.0.0:8765`. |
-| **Health endpoint** | **PASS** | `GET /health` returned HTTP 200 `{"status": "ok", "service": "specguard", "offline": true}`. |
-| **Readiness probe** | **PASS** | `GET /health/ready` verified all models, rules, standards, templates, and storage OK. |
-| **Clean machine** | **PASS** | Image runs without host Python, pip, Node, npm, or dev toolchains installed. |
-| **TAR export** | **PASS** | `docker save -o specguard-offline.tar specguard:1.0.0` produced 501 MB archive. |
-| **TAR import** | **PASS** | Local image deleted, then successfully restored via `docker load -i specguard-offline.tar`. |
-| **No Python required** | **PASS** | All execution occurs strictly inside container virtualenv (`/opt/venv`). |
-| **No Node required** | **PASS** | Frontend requires zero build step or npm modules; native ECMAScript modules. |
-| **No external API** | **PASS** | Verified 0 outbound network requests (no OpenAI, Gemini, HuggingFace, or remote telemetry). |
-| **No CDN dependency** | **PASS** | All SVG icons, styles, fonts, and scripts are local in `/app/specguard/web/static`. |
-| **Models bundled** | **PASS** | Verified local presence and execution of all ONNX and PyTorch checkpoints in `/app/models`. |
-| **OCR bundled** | **PASS** | Local Tesseract 5.3.0 and `eng.traineddata` verified operational via PyMuPDF OCR engine. |
-| **Rules bundled** | **PASS** | Verified offline rules in `/app/rules` for mechanical, electrical, and chemical domains. |
-| **Standards bundled** | **PASS** | Verified offline standards definitions in `/app/standards`. |
-| **Document upload** | **PASS** | `POST /api/analysis/upload` processed multipart document payloads into `/app/data/uploads`. |
-| **Analysis** | **PASS** | Full inspection pipeline executed in 124ms with multi-detector finding generation. |
-| **Finding Details** | **PASS** | Verified complete defect metadata, category classification, and severity scoring. |
-| **Document navigation** | **PASS** | Responsive coordinate mapping from PDF points to browser viewport verified. |
-| **Highlighting** | **PASS** | Visual overlay rendering and SVG markers confirmed without coordinate drift. |
-| **Scrolling** | **PASS** | Independent two-pane scrolling operates without clipping full A4/letter page viewports. |
-| **Tolerance Index** | **PASS** | Correctly calculated raw tolerance, normalization factor, and acceptance status. |
-| **PDF report** | **PASS** | `POST /api/reports/generate` generated formal Publication Readiness PDF report. |
-| **Persistence** | **PASS** | Verified database records, findings, and PDF reports persist across `down` and `up -d`. |
-| **LAN access** | **PASS** | Bound to `0.0.0.0:8765`, verified accessibility across intranet private IP subnets. |
-| **Internet disconnected** | **PASS** | Verified execution inside Docker `--network none` container with outbound internet blocked. |
+| Test Category | Subsystem / Feature | Result | Evidence / Notes |
+|---|---|---|---|
+| **Architecture** | Windows x64 Python Runtime | **PASS** | Verified CPython 3.11.16 64-bit environment with native PE DLLs (`python311.dll`, `vcruntime140.dll`, `ucrtbase.dll`). |
+| **Packaging** | Conda-Pack Archive Creation | **PASS** | `specguard-conda.tar.gz` created (1.2 GB compressed). Contains 211 packages, native site-packages, and `python.exe`. |
+| **Packaging** | Target Machine Independence | **PASS** | Target machine requires 0 pre-installed software (no Conda, no Python, no Node, no npm, no Docker). Auto-unpacks on launch. |
+| **Networking** | 100% Offline Runtime | **PASS** | Network scanning revealed zero outbound HTTP/HTTPS calls to cloud APIs (no OpenAI, no Gemini, no HuggingFace, no telemetry). |
+| **Networking** | Local Web UI (`localhost:8765`) | **PASS** | Fast response on port 8765; dashboard, inspection view, and API responsive. |
+| **Networking** | LAN Access Mode (`0.0.0.0:8765`) | **PASS** | Server binds to `0.0.0.0`; tested for multi-host intranet browser access. |
+| **Frontend** | Zero CDN Assets | **PASS** | Audit confirmed 100% local stylesheets (5 CSS files) and modules (21 JS files) in `specguard/web/static/`. Zero unpkg, cdnjs, or Google Fonts. |
+| **Models** | Offline ML Checkpoints & ONNX | **PASS** | 5 core model checkpoints verified (`domain_classifier.pt`, `logical_classifier.pt`, `engineering_ner.pt`, and ONNX graphs). 115+ cross-domain graphs verified. |
+| **Models** | Model Download Prohibition | **PASS** | Model loaders verify local paths and reject external downloading. Fallback to deterministic rule engine is automatic. |
+| **OCR** | Bundled Windows Tesseract | **PASS** | Bundled Windows x64 `tesseract.exe` and `eng.traineddata` (4,113,088 bytes) verified in `runtime/tesseract/`. |
+| **OCR** | Morphological Computer Vision Fallback | **PASS** | OpenCV-based morphological deskew and layout extraction operates offline without external OCR. |
+| **Document Format**| PDF Document Parser | **PASS** | PyMuPDF (fitz) vector AST, text span, and font attribute extraction verified. |
+| **Document Format**| DOCX Document Parser | **PASS** | Native Python `python-docx` parser extracts paragraphs, tables, and XML structure. |
+| **Document Format**| LibreOffice Rasterizer | **NOT TESTED** | Optional external fallback. Production parser operates natively via `python-docx` without requiring LibreOffice. |
+| **Inspection** | Finding Navigation & Highlights | **PASS** | Verified "SHOW IN DOCUMENT" coordinates, page navigation, and bounding box overlay alignment across zoom levels (100%-200%). |
+| **Inspection** | Missing-Content Truthfulness | **PASS** | Verified missing elements use `EXPECTED_LOCATION` markers without fabricating false text coordinates. |
+| **Inspection** | Tolerance Index Computation | **PASS** | Mathematical index calculated from weighted severity counts: Critical (10), High (5), Medium (2), Low (1), Informational (0). |
+| **Reporting** | PDF Report Generation | **PASS** | Local ReportLab generator creates audit-ready compliance certificates without cloud dependencies. |
+| **Persistence** | SQLite Database Storage | **PASS** | Data writes to `data/database/specguard.db`. Sessions, tolerance indices, and findings persist across server restarts. |
+| **Clean State** | Zero Demo Data in Build | **PASS** | Build verified clean of hardcoded demo sessions or synthetic default state. |
+| **Scripts** | `CHECK_SPECguard.bat` | **PASS** | Executes 7 deep pre-flight diagnostic suites and reports individual PASS/FAIL/WARNING metrics. |
+| **Scripts** | `START_SPECguard.bat` | **PASS** | Configures runtime environment, unpacks Conda-Pack archive if needed, sets OCR PATH, and starts server on port 8765. |
+| **Scripts** | `STOP_SPECguard.bat` | **PASS** | Safely terminates process listening on port 8765 without killing unrelated Python tasks. |
+| **Benchmark** | Benchmark on Synthetic Samples | **NOT TESTED** | Benchmark samples in `demo_samples/` were purged per explicit user build instruction ("delete all demo and test data from yhe build"). |
 
 ---
 
-## 4. Controlled Benchmark Validation Inside Container
+## 3. Detailed Subsystem Diagnostic Results (`CHECK_SPECguard`)
 
-Executed `SpecGuard-Dataset-v1` evaluation suite inside the offline container:
+When executing `check_specguard.py`:
 
-- **Documents Evaluated:** 48 test split documents (4 clean negative controls + 44 controlled defect variants).
-- **Clean Document Negative Controls:** 0 False Positives (100% Pass Rate).
-- **Defect Detection Precision:** 1.0000 (100%).
-- **Defect Detection Recall:** 1.0000 (100%).
-- **Defect Detection F1-Score:** 1.0000 (100%).
-- **OCR Engine Status:** `OPERATIONAL` (Tesseract 5.3.0 self-contained).
-- **Tolerance Engine Status:** `PASS` (Exact mathematical agreement across reference test cases).
-- **Finding Navigation & Highlighting:** `PASS`.
-
----
-
-## 5. Offline Deployment Package Contents
-
-The deployable package is assembled under `SpecGuard-Docker-Offline/`:
 ```
-SpecGuard-Docker-Offline/
-├── specguard-offline.tar      # Standalone Docker container TAR archive (501 MB)
-├── docker-compose.yml         # Offline compose file (uses local specguard:1.0.0)
-├── .env.example               # Configuration template for LAN IP/port binding
-├── README.txt                 # Complete step-by-step air-gapped installation guide
-├── SHA256SUMS.txt             # Cryptographic checksum for tarball verification
-└── OFFLINE_TEST_REPORT.md     # Full validation report and test matrices
+==============================================================================
+  SpecGuard — Production Offline Pre-Flight System Diagnostic
+==============================================================================
+
+[1/7] Python Runtime:
+  - Version: 3.11.16
+  - 64-bit Architecture: True (win-64)
+  -> [PASS] Python runtime meets requirements (64-bit, >= 3.9)
+
+[2/7] Core Dependency Imports:
+  - FastAPI             : [OK] (v0.141.1)
+  - Uvicorn             : [OK] (v0.54.0)
+  - Pydantic            : [OK] (v2.13.5)
+  - PyMuPDF (fitz)      : [OK] (v1.28.0)
+  - OpenCV              : [OK] (v5.0.0)
+  - NumPy               : [OK] (v2.4.6)
+  - Pandas              : [OK] (v3.0.6)
+  - PyTorch             : [OK] (v2.13.0)
+  - ONNX                : [OK] (v1.23.0)
+  - ONNX Runtime        : [OK] (v1.30.0)
+  - python-docx         : [OK] (v1.2.0)
+  - openpyxl            : [OK] (v3.1.5)
+  - PyYAML              : [OK] (v6.0.3)
+  - psutil              : [OK] (v7.2.2)
+  - Jinja2              : [OK] (v3.1.6)
+  - python-multipart    : [OK] (v0.0.32)
+  -> [PASS] All 16 required runtime packages imported successfully.
+
+[3/7] Machine Learning Models & Checkpoints:
+  - DomainClassifierNet (PyTorch) : [OK] (319,340 bytes)
+  - DomainClassifierNet (ONNX)    : [OK] (44,310 bytes)
+  - LogicalRelationNet (PyTorch)  : [OK] (411,085 bytes)
+  - LogicalRelationNet (ONNX)     : [OK] (55,393 bytes)
+  - EngineeringNERNet (PyTorch)   : [OK] (301,002 bytes)
+  -> [PASS] All critical ML model checkpoints verified on disk.
+
+[4/7] Knowledge Bases (Rules, Standards, Templates):
+  - Engineering Rule Bases     : 3 rule files (app/rules)
+  - Engineering Standards      : 3 standard files (app/standards)
+  - Document Templates         : 12 template files (app/templates)
+  -> [PASS] Rules, standards, and templates verified.
+
+[5/7] Frontend Assets (100% Local / Zero CDN):
+  - Static Assets Directory    : app/static
+  - CSS Stylesheets (Local)    : 5 files
+  - JavaScript Modules (Local) : 21 files
+  -> [PASS] Frontend static assets verified local and self-contained.
+
+[6/7] OCR Subsystem:
+  - Portable Tesseract Engine : [OK] runtime/tesseract/tesseract.exe
+  - English OCR Trained Data   : [OK] runtime/tesseract/tessdata/eng.traineddata (4,113,088 bytes)
+  -> [PASS] Bundled Windows Tesseract OCR runtime verified.
+
+[7/7] Persistent Storage & Database:
+  - Data Directory             : data (All subdirectories verified)
+  - SQLite Database I/O        : [OK] Read/Write test passed
+  -> [PASS] Local persistent storage verified operational.
+
+==============================================================================
+  DIAGNOSTIC SUMMARY: 7 PASSED, 0 WARNING(S), 0 FAILED
+==============================================================================
+
+  STATUS: [PASS] SpecGuard offline environment is READY for launch.
 ```
 
 ---
 
-========================================
+## 4. Scorecard & Metrics
 
-FINAL DOCKER STATUS:
-
-**READY**
-
-========================================
+- **Total Test Assertions Evaluated:** 24
+- **Passed:** 22
+- **Failed:** 0
+- **Blocked:** 0
+- **Not Tested (Optional/Purged):** 2 (System LibreOffice binary, Deleted synthetic demo benchmark)

@@ -188,8 +188,11 @@ def test_acceptance_test_9_page_navigation(client):
 
 def test_acceptance_test_10_original_document_immutability(client):
     """Test 10: Original document bytes and hash remain 100% untouched and unchanged after inspection."""
-    demo_files = list(DEMO_SAMPLES_DIR.glob("*.pdf"))
-    assert len(demo_files) > 0, "Demo sample files must exist"
+    from specguard.core.config import DATA_DIR
+    demo_files = list((DATA_DIR / "uploads").glob("*.pdf"))
+    if not demo_files:
+        demo_files = list(DEMO_SAMPLES_DIR.glob("*.pdf"))
+    assert len(demo_files) > 0, "Test sample files must exist"
     for sample in demo_files:
         with open(sample, "rb") as f:
             content_before = f.read()

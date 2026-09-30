@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light dark" />
   <title>SpecGuard — Engineering Document Quality & Compliance Inspection Platform</title>
-  <meta name="description" content="SpecGuard: Engineering Document Quality & Compliance Inspection Platform (DocReady Platform engine)" />
+  <meta name="description" content="SpecGuard: Engineering Document Quality & Compliance Inspection Platform" />
 
   <!-- Prevent Theme FOUC -->
   <script>
     (function() {
-      const savedTheme = localStorage.getItem("specguard-theme") || localStorage.getItem("docready-theme");
+      const savedTheme = localStorage.getItem("specguard-theme");
       const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       const theme = savedTheme || (systemDark ? "dark" : "light");
       document.documentElement.setAttribute("data-theme", theme);
@@ -156,7 +156,6 @@
         <!-- Bottom Status Bar -->
         <footer class="app-statusbar">
           <div class="statusbar-section">
-            <span class="legacy-alias" style="display: none;" aria-hidden="true">DocReady Platform DOCREADY</span>
             <span>SpecGuard Inspection Platform</span>
             <span>•</span>
             <span id="statusbar-session-info">Ready for Inspection</span>

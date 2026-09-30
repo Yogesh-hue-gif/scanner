@@ -93,7 +93,7 @@ python app.py --host 0.0.0.0 --port 8765
 2026-09-27 13:20:00 [INFO] SpecGuard: Starting SpecGuard 100% Offline LAN Web Server
 2026-09-27 13:20:00 [INFO] SpecGuard: Listening on: http://0.0.0.0:8765 (Localhost: http://127.0.0.1:8765)
 2026-09-27 13:20:00 [INFO] SpecGuard: LAN Access available at http://<YOUR-SERVER-LAN-IP>:8765 for intranet clients.
-2026-09-27 13:20:00 [INFO] DocReady.Server: Verifying local offline environment...
+2026-09-27 13:20:00 [INFO] SpecGuard.Server: Verifying local offline environment...
 2026-09-27 13:20:00 [INFO] SpecGuard: Environment verified: 100% Offline Mode Active.
 ```
 

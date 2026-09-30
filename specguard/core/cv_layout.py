@@ -77,8 +77,9 @@ class LayoutAnalyzerCV:
         for cnt in contours:
             x, y, bw, bh = cv2.boundingRect(cnt)
             area = bw * bh
-            # Minimum figure size threshold (e.g. at least 5% of page area, not entire page)
-            if area > (w * h * 0.04) and area < (w * h * 0.85):
+            # Figure size threshold: between 4% and 65% of page area, not page border box
+            if area > (w * h * 0.04) and area < (w * h * 0.65) and bw < (w * 0.85) and bh < (h * 0.85):
+
                 fig_bbox = BBox(x0=float(x), y0=float(y), x1=float(x + bw), y1=float(y + bh))
                 
                 # Check if it overlaps heavily with detected tables

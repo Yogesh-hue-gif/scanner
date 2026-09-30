@@ -534,7 +534,8 @@ window.DashboardView = {
               </div>
             </div>
 
-            <div style="display: flex; gap: 8px;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+
               <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('overview')">
                 📑 Document Overview
               </button>

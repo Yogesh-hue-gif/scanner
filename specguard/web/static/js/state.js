@@ -104,18 +104,7 @@ class AppState {
       targetId = localStorage.getItem("specguard-active-session");
     }
 
-    // If still no session ID, attempt to fetch the latest session from database
-    if (!targetId) {
-      try {
-        const recentRes = await window.api.dashboard.getRecent(1);
-        if (recentRes && recentRes.recent_comparisons && recentRes.recent_comparisons.length > 0) {
-          targetId = recentRes.recent_comparisons[0].comparison_id;
-        }
-      } catch (err) {
-        console.warn("Could not check recent comparisons from database:", err);
-      }
-    }
-
+    // If still no session ID, return clean NO_ANALYSIS state
     if (!targetId) {
       this.set("activeSessionId", null);
       this.set("activeDocument", null);
@@ -123,6 +112,7 @@ class AppState {
       this.set("analysisStatus", "NO_ANALYSIS");
       return null;
     }
+
 
     // 2. Query persistent session from backend
     try {

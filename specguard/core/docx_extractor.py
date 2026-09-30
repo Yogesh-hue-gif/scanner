@@ -48,6 +48,19 @@ def find_libreoffice_executable() -> Optional[str]:
         if os.path.exists(p) and os.access(p, os.X_OK):
             return str(p)
 
+    # Portable package runtime paths
+    from specguard.core.runtime_paths import get_app_dir
+    app_dir = get_app_dir()
+    portable_paths = [
+        app_dir.parent / "runtime" / "libreoffice" / "program" / "soffice.exe",
+        app_dir / "runtime" / "libreoffice" / "program" / "soffice.exe",
+        app_dir.parent / "runtime" / "libreoffice" / "soffice.exe",
+        app_dir / "runtime" / "libreoffice" / "soffice.exe",
+    ]
+    for p in portable_paths:
+        if os.path.exists(p):
+            return str(p)
+
     # Windows standard paths
     win_paths = [
         os.path.expandvars(r"%ProgramFiles%\LibreOffice\program\soffice.exe"),

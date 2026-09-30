@@ -32,7 +32,12 @@ class LogicalAnalyzer(BaseAnalyzer):
 
         parameters: List[EngineeringParameter] = (context or {}).get("parameters", [])
         if not parameters:
+            from specguard.analyzers.engineering import EngineeringAnalyzer
+            parameters = EngineeringAnalyzer().extract_parameters(doc)
+
+        if not parameters:
             return findings
+
 
         # 1. Group parameters by parameter name across the whole document
         registry: Dict[str, List[EngineeringParameter]] = defaultdict(list)

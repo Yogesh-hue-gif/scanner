@@ -1,13 +1,13 @@
-# DocReady
+# SpecGuard
 
 ## Official Project Title
-**DocReady — An Offline Intranet Platform for Template-Aware Document Formatting Analysis and Readiness Verification**
+**SpecGuard — An Offline Intranet Platform for Template-Aware Document Formatting Analysis and Readiness Verification**
 
 ---
 
 ## 1. Overview & Architectural Capabilities
 
-**DocReady** (formerly SpecGuard) is a 100% offline, intranet-accessible document intelligence platform that analyzes engineering and structured documents for:
+**SpecGuard** is a 100% offline, intranet-accessible document intelligence platform that analyzes engineering and structured documents for:
 
 - Formatting consistency & page layout correctness
 - Typography consistency (fonts, sizes, weights, hierarchy)
@@ -74,25 +74,53 @@ A permanent **100% OFFLINE** verification badge and diagnostic screen continuous
 
 ---
 
-## 5. Installation & Quickstart
+## 5. Production Offline Deployment (Conda-Pack)
 
-### Prerequisites (for Development)
-- Python 3.9+ (Python 3.11 recommended)
+SpecGuard is deployed as a self-contained Conda-Pack environment.
+**No runtime package installation is required. No internet connection is required.**
+
+### Offline Deployment Architecture
+
+```
+TRANSFER → Extract SpecGuard-Offline-Conda → Run CHECK_SPECguard → Run START_SPECguard → Access in Browser
+```
+
+### 1-Click Operations
+
+| Operation | Windows | Linux / macOS | Purpose |
+|:---|:---|:---|:---|
+| **Pre-Flight Diagnostics** | `CHECK_SPECguard.bat` | `./check_specguard.sh` | Verifies Python runtime, models, rules, standards, and data integrity |
+| **Launch Server** | `START_SPECguard.bat` | `./start_specguard.sh` | Automatically unpacks environment on first run and starts server on `0.0.0.0:8765` |
+| **Graceful Stop** | `STOP_SPECguard.bat` | `./stop_specguard.sh` | Terminates active server process on port 8765 and flushes databases |
+
+### Browser Access
+
+- **Localhost:** `http://localhost:8765` or `http://127.0.0.1:8765`
+- **LAN / Intranet Clients:** `http://<SERVER-IP-ADDRESS>:8765` (e.g. `http://192.168.1.100:8765`)
+
+Zero software installation is required on client workstations. Users navigate directly to the server's LAN IP address using any standard web browser.
+
+---
+
+## 6. Development Quickstart
+
+### Prerequisites
+- Python 3.9+ (Python 3.11 recommended) or Conda
 - macOS, Linux, or Windows
 
-### Running SpecGuard / DocReady
+### Running SpecGuard Locally
 
 ```bash
-# Launch the web application (default: http://127.0.0.1:8765):
-python app.py
+# Using Conda environment definition:
+conda env create -f environment.yml
+conda activate specguard
 
-# Launch on custom host and port:
+# Or launch directly with Python:
 python app.py --host 0.0.0.0 --port 8765
 
 # Or via the convenience runner:
 python run_web.py
 ```
-The application starts the local backend server at `http://127.0.0.1:8765` and serves the inspection platform UI with zero external dependencies.
 
 ### Running Automated Test Suite
 
@@ -103,33 +131,21 @@ All tests execute 100% offline.
 
 ---
 
-## 5. Demonstration Data
-
-Pre-generated synthetic engineering test documents containing realistic deviations are available in `demo_samples/`:
-- `demo_samples/mechanical_sample_with_errors.pdf`:
-  - Critical tolerance deviation ($\pm 0.5\text{ mm}$ vs standard limit $\pm 0.05\text{ mm}$)
-  - Logical contradiction ($80^\circ\text{C}$ on Page 1 vs $60^\circ\text{C}$ on Page 2)
-  - Broken structural numbering (Section 3.1 $\to$ Section 3.3, missing 3.2)
-  - TOC page drift (TOC lists Page 4, actual heading is on Page 2)
-  - Controlled spelling typos (`maintanence`, `teh`, `recieved`)
-  - Table missing cells and mixed column units
-- `demo_samples/electrical_sample_with_errors.pdf`:
-  - Critical voltage deviation ($230\text{ V}$ detected vs standard $415\text{ V}$ industrial feeder)
-  - Feeder current overload ($750\text{ A}$ vs standard $630\text{ A}$ switchgear rating)
-- `demo_samples/chemical_sample_with_errors.docx`:
-  - Critical concentration deviation ($15\%$ detected vs safety standard limit $10\%$)
-  - Thermal runaway threshold violation ($140^\circ\text{C}$ vs safety limit $120^\circ\text{C}$)
-
----
-
-## 6. Project Structure
+## 7. Project Structure
 
 ```text
 ├── app.py                      # Web application server entry point (FastAPI + Uvicorn)
 ├── run_web.py                  # Convenience web runner
+├── environment.yml             # Canonical Conda environment definition
+├── requirements-conda.txt      # Pinned offline package manifest
 ├── pyproject.toml              # Dependencies & packaging metadata
-├── Dockerfile                  # Container definition for web deployment
-├── render.yaml                 # Render infrastructure configuration
+├── START_SPECguard.bat         # Windows offline launch script
+├── STOP_SPECguard.bat          # Windows stop script
+├── CHECK_SPECguard.bat         # Windows diagnostic pre-flight script
+├── start_specguard.sh          # Linux/macOS offline launch script
+├── stop_specguard.sh           # Linux/macOS stop script
+├── check_specguard.sh          # Linux/macOS diagnostic script
+├── SpecGuard-Offline-Conda/    # Standalone offline deployment bundle
 ├── specguard/
 │   ├── analyzers/              # 16+ pure Python analysis & severity modules
 │   ├── core/                   # Pipeline orchestrator, document parsers, models
@@ -144,7 +160,6 @@ Pre-generated synthetic engineering test documents containing realistic deviatio
 │   └── web/                    # Modern offline HTML5/CSS3/JS user interface
 │       ├── templates/          # Semantic index.html application shell
 │       └── static/             # Pure vanilla CSS design system & JS components
-├── demo_samples/               # Ready-to-analyze engineering test files
 ├── standards/                  # Local machine-readable standards (ASME, IEC, etc.)
 ├── templates/                  # Fixed domain templates (Mechanical, Electrical, Chemical)
 └── tests/                      # Pytest automated test suite
@@ -152,6 +167,6 @@ Pre-generated synthetic engineering test documents containing realistic deviatio
 
 ---
 
-## 7. License & Notice
+## 8. License & Notice
 
 SpecGuard is an engineering decision-support framework. All findings and suggested corrections must be verified by a qualified engineer prior to design or manufacturing execution.

@@ -104,32 +104,33 @@ class EngineeringAnalyzer(BaseAnalyzer):
         return FindingCategory.ENGINEERING
 
     def __init__(self):
-        # Comprehensive parameter regex patterns
+        # Comprehensive robust parameter regex patterns
         self.param_patterns = [
-            # Voltage: e.g. "rated voltage = 415 V", "voltage: 230V"
-            (r'\b(?:[A-Za-z\-]+\s+)*?voltage\s*(?:of|is|=|\:)?\s*([0-9\.]+)\s*(k?V)(?![A-Za-z0-9])', "voltage", "Electrical"),
-            # Current: e.g. "rated current of 16 A", "current = 100A"
-            (r'\b(?:[A-Za-z\-]+\s+)*?current\s*(?:of|is|=|\:)?\s*([0-9\.]+)\s*(k?A|mA)(?![A-Za-z0-9])', "current", "Electrical"),
-            # Frequency: e.g. "frequency: 50 Hz"
-            (r'\b(?:[A-Za-z\-]+\s+)*?frequency\s*(?:of|is|=|\:)?\s*([0-9\.]+)\s*(Hz|kHz)(?![A-Za-z0-9])', "frequency", "Electrical"),
-            # Power: e.g. "rated power: 75 kW"
-            (r'\b(?:[A-Za-z\-]+\s+)*?power\s*(?:of|is|=|\:)?\s*([0-9\.]+)\s*(kW|MW|W|kVA)(?![A-Za-z0-9])', "power", "Electrical"),
+            # Voltage: e.g. "rated voltage = 415 V", "voltage: 230V", "supply voltage specified: 415 V"
+            (r'\bvoltage\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(k?V)\b', "voltage", "Electrical"),
+            # Current: e.g. "rated current of 16 A", "current = 100A", "operating current: 16 A"
+            (r'\bcurrent\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(k?A|mA)\b', "current", "Electrical"),
+            # Frequency: e.g. "frequency: 50 Hz", "system frequency = 50Hz"
+            (r'\bfrequency\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(Hz|kHz|MHz)\b', "frequency", "Electrical"),
+            # Power: e.g. "rated power: 75 kW", "power rating = 100 kW"
+            (r'\bpower\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(kW|MW|W|kVA|MVA)\b', "power", "Electrical"),
             
-            # Tolerance: e.g. "tolerance = ±0.05 mm", "tolerance of ±0.5 mm"
-            (r'\btolerance\s*(?:of|is|=|\:)?\s*(?:[±\+\-]|plus\s+or\s+minus)?\s*([0-9\.]+)\s*(mm|μm|um)(?![A-Za-z0-9])', "tolerance", "Mechanical"),
+            # Tolerance: e.g. "tolerance = ±0.05 mm", "tolerance of ±0.5 mm", "machining tolerance: 0.1 mm"
+            (r'\btolerance\b[^.\n\r]*?(?:[±\+\-]|plus\s+or\s+minus)?\s*([0-9\.]+)\s*(mm|μm|um|in)\b', "tolerance", "Mechanical"),
             # Pressure: e.g. "maximum operating pressure = 10 bar", "Operating pressure specified in this section: 15 bar"
-            (r'\b(?:[A-Za-z\-]+\s+)*?pressure\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(bar|MPa|kPa|psi)\b', "pressure", "Mechanical"),
+            (r'\bpressure\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(bar|MPa|kPa|psi)\b', "pressure", "Mechanical"),
 
-            # Temperature: e.g. "maximum temperature = 80°C", "design temperature: 60 °C"
-            (r'\b(?:[A-Za-z\-]+\s+)*?temperature\s*(?:of|is|=|\:)?\s*([0-9\.]+)\s*(°C|C|K)(?![A-Za-z0-9])', "temperature", "Mechanical"),
+            # Temperature: e.g. "maximum temperature = 80°C", "design temperature: 60 °C", "temperature limit of 80 °C"
+            (r'\btemperature\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(°C|C|K|°F|F)\b', "temperature", "Mechanical"),
             # Surface roughness: e.g. "surface finish Ra 0.8 μm", "roughness: 1.6 um"
-            (r'\b(?:surface\s+roughness|roughness|surface\s+finish)\s*(?:of|is|=|Ra|\:)?\s*([0-9\.]+)\s*(μm|um)(?![A-Za-z0-9])', "surface_roughness", "Mechanical"),
+            (r'\b(?:surface\s+roughness|roughness|surface\s+finish)\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(μm|um|µm)\b', "surface_roughness", "Mechanical"),
 
             # Concentration: e.g. "required concentration = 10%", "concentration: 15 wt%"
-            (r'\b(?:[A-Za-z\-]+\s+)*?concentration\s*(?:of|is|=|\:)?\s*([0-9\.]+)\s*(%|wt%|vol%|ppm)(?![A-Za-z0-9])', "concentration", "Chemical"),
+            (r'\bconcentration\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(%|wt%|vol%|ppm)\b', "concentration", "Chemical"),
             # Flash Point: e.g. "flash point: 45°C"
-            (r'\bflash\s+point\s*(?:of|is|=|\:)?\s*([0-9\.]+)\s*(°C|C|K)(?![A-Za-z0-9])', "flash_point", "Chemical")
+            (r'\bflash\s+point\b[^.\n\r]*?[:=]?\s*([0-9\.]+)\s*(°C|C|K|°F|F)\b', "flash_point", "Chemical")
         ]
+
 
     def extract_parameters(self, doc: DocumentModel) -> List[EngineeringParameter]:
         """Extracts all structured engineering parameters from the document."""
