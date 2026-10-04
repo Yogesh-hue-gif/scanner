@@ -6,7 +6,7 @@ Strictly 100% offline.
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from specguard.core.runtime_paths import (
     get_app_dir,
@@ -47,6 +47,10 @@ for directory in [DATA_DIR, REPORTS_DIR, LOGS_DIR, UPLOADS_DIR]:
         pass
 
 
+# Optional default specification path (strictly None by default unless explicitly configured)
+DEFAULT_SPEC_PATH: Optional[str] = os.environ.get("DEFAULT_SPEC_PATH", None)
+
+
 @dataclass
 class SeverityWeights:
     """Weights for calculating priority score of detected findings."""
@@ -65,7 +69,8 @@ class AppConfig:
     version: str = "1.0.0"
     offline_mode: bool = True  # NON-NEGOTIABLE: Always True
     min_confidence_threshold: float = 0.50
-    active_domain: str = "mechanical"  # 'mechanical', 'chemical', 'electrical'
+    active_domain: Optional[str] = None  # None by default (no hardcoded domain)
+    default_spec_path: Optional[str] = DEFAULT_SPEC_PATH  # None by default
     selected_standards: list = field(default_factory=list)
     weights: SeverityWeights = field(default_factory=SeverityWeights)
     highlight_colors: Dict[str, str] = field(default_factory=lambda: {

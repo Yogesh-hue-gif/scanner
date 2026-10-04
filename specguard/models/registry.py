@@ -27,6 +27,17 @@ for d in [MODELS_DIR, CHECKPOINTS_DIR, ONNX_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 
+import os
+import gc
+import uuid
+from typing import Union
+
+try:
+    import torch
+except ImportError:
+    torch = None
+
+
 def calculate_sha256(file_path: Path) -> str:
     """Calculates the SHA-256 digest of a local file."""
     sha = hashlib.sha256()
@@ -34,6 +45,95 @@ def calculate_sha256(file_path: Path) -> str:
         while chunk := f.read(65536):
             sha.update(chunk)
     return sha.hexdigest()
+
+
+def validate_dataset_path(dataset_path: Union[str, Path]) -> Path:
+    """
+    Dynamically validates dataset file or directory paths before training or evaluation.
+    Ensures path exists, is non-empty, and has valid structured data format.
+    Raises descriptive FileNotFoundError or ValueError.
+    """
+    if not dataset_path:
+        raise ValueError("Dataset path cannot be empty or None.")
+
+    path = Path(dataset_path).resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Specified dataset path does not exist on disk: {path}")
+
+    if path.is_file():
+        if path.stat().st_size == 0:
+            raise ValueError(f"Dataset file is empty (0 bytes): {path}")
+        allowed_exts = {".json", ".jsonl", ".csv", ".txt", ".tsv", ".yaml", ".yml"}
+        if path.suffix.lower() not in allowed_exts:
+            raise ValueError(f"Unsupported dataset format '{path.suffix}'. Allowed: {', '.join(sorted(allowed_exts))}")
+        return path
+    elif path.is_dir():
+        # Check that directory contains at least one dataset artifact
+        data_files = [
+            f for f in path.glob("*.*")
+            if f.suffix.lower() in {".json", ".jsonl", ".csv", ".txt", ".tsv"} and f.stat().st_size > 0
+        ]
+        if not data_files:
+            raise ValueError(f"Dataset directory '{path}' contains no non-empty data files (.json, .jsonl, .csv, .tsv, .txt).")
+        return path
+    else:
+        raise ValueError(f"Invalid dataset path object (not a regular file or directory): {path}")
+
+
+def safe_save_weights(
+    weights_or_obj: Any,
+    target_path: Union[str, Path],
+    is_torch: bool = True
+) -> str:
+    """
+    Safely writes weights to disk avoiding Windows file locking and memory mapping collisions.
+    Uses garbage collection to release open handles, writes to an isolated temporary file,
+    and replaces the target file atomically via os.replace.
+    Returns the SHA-256 hash of the written artifact.
+    """
+    target = Path(target_path).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    # Clean up garbage and CUDA cache to release any hanging file/mmap locks
+    gc.collect()
+    if torch and torch.cuda.is_available():
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+    tmp_path = target.parent / f".tmp_{uuid.uuid4().hex[:8]}_{target.name}"
+
+    try:
+        if is_torch:
+            if torch is None:
+                raise RuntimeError("PyTorch is required to serialize PyTorch weight checkpoints.")
+            torch.save(weights_or_obj, str(tmp_path))
+        else:
+            if isinstance(weights_or_obj, (bytes, bytearray)):
+                with open(tmp_path, "wb") as f:
+                    f.write(weights_or_obj)
+            elif isinstance(weights_or_obj, str):
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    f.write(weights_or_obj)
+            else:
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(weights_or_obj, f, indent=2)
+
+        # Force flush and collect
+        gc.collect()
+
+        # Atomic replacement on Windows and POSIX
+        os.replace(tmp_path, target)
+
+        # Return validated SHA-256 hash
+        return calculate_sha256(target)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
 
 
 class BaseModelService(ABC):
@@ -104,8 +204,17 @@ class ModelRegistry:
 
     def _write_registry(self, data: Dict[str, Any]):
         data["last_updated"] = datetime.now(timezone.utc).isoformat()
-        with open(self.registry_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        tmp_path = self.registry_file.parent / f".tmp_{uuid.uuid4().hex[:8]}_{self.registry_file.name}"
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp_path, self.registry_file)
+        finally:
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
 
     def scan_and_sync_artifacts(self):
         """Scans models/checkpoints and models/onnx to discover unindexed models."""

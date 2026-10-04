@@ -225,7 +225,7 @@ window.DashboardView = {
             </div>
           </div>
           <div style="display: flex; gap: 10px; align-items: center;">
-            <button class="btn btn-primary" onclick="window.router.navigate('viewer')">
+            <button class="btn btn-primary" onclick="window.router.navigate('viewer', { session_id: '${escapeHtml(sessionId || '')}' })">
               👁️ View Document
             </button>
             <button class="btn btn-secondary" onclick="window.router.navigate('new_analysis')">
@@ -535,14 +535,13 @@ window.DashboardView = {
             </div>
 
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-
-              <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('overview')">
+              <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('overview', { session_id: '${escapeHtml(sessionId || '')}' })">
                 📑 Document Overview
               </button>
-              <button class="btn btn-primary btn-sm" onclick="window.router.navigate('viewer')">
+              <button class="btn btn-primary btn-sm" onclick="window.router.navigate('viewer', { session_id: '${escapeHtml(sessionId || '')}' })">
                 👁️ Open Document Inspection
               </button>
-              <button class="btn btn-outline btn-sm" onclick="window.router.navigate('reports')">
+              <button class="btn btn-outline btn-sm" onclick="window.router.navigate('reports', { session_id: '${escapeHtml(sessionId || '')}' })">
                 📑 Reports
               </button>
               <button class="btn btn-outline btn-sm" onclick="window.router.navigate('new_analysis')">

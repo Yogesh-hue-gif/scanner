@@ -480,9 +480,13 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   overflow-y: auto;
+  overflow-x: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
   padding: 18px;
   box-shadow: var(--shadow-sm);
   min-height: 0;
+  max-height: 100%;
 }
 
 .document-inspection-column {

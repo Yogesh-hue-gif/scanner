@@ -261,6 +261,7 @@
   display: flex;
   height: 100%;
   width: 100%;
+  max-height: 100%;
   overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
@@ -271,13 +272,18 @@
 }
 
 .viewer-pages-sidebar {
-  width: 150px;
+  width: 230px;
+  min-width: 180px;
+  max-width: 280px;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
   border-right: 1px solid var(--border-default);
   background-color: var(--bg-surface-sunken);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  min-height: 0;
+  overflow: hidden;
 }
 
 .pages-sidebar-header {
@@ -294,9 +300,14 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 8px;
+  padding: 8px 6px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+  min-height: 0;
+  max-height: 100%;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .page-thumb-item {
@@ -445,9 +456,14 @@
 }
 
 /* Precise Document Annotation Elements */
-.finding-annotation-group {
-  pointer-events: auto;
-  cursor: pointer;
+.finding-annotation-group,
+.finding-bbox,
+.finding-marker,
+.annotation-squiggly-path.finding-marker,
+.annotation-double-line.finding-marker,
+.annotation-dotted-line.finding-marker {
+  pointer-events: auto !important;
+  cursor: pointer !important;
 }
 
 .annotation-interactive-box {
@@ -588,12 +604,18 @@
 
 /* Viewer Detail Drawer */
 .viewer-detail-drawer {
-  width: 360px;
+  width: 380px;
+  min-width: 300px;
+  max-width: 440px;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
   border-left: 1px solid var(--border-default);
   background-color: var(--bg-surface);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  overflow: hidden;
   transition: width var(--transition-normal);
 }
 
@@ -612,16 +634,22 @@
 .drawer-content {
   padding: 16px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+  min-height: 0;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .finding-prop-group {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  min-width: 0;
 }
 
 .finding-prop-label {
@@ -635,17 +663,23 @@
   font-size: 13px;
   color: var(--text-primary);
   line-height: 1.4;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .finding-prop-code {
   font-family: var(--font-mono);
   font-size: 12px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   background-color: var(--bg-surface-sunken);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   color: var(--accent-primary);
-  word-break: break-all;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
 }
 
 /* --- VIEW: Findings Management --- */

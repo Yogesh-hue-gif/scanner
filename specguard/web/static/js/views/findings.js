@@ -171,7 +171,7 @@ window.FindingsView = {
                 <span id="canvas-defect-status" class="badge badge-info" style="font-size: 10.5px;">Page 1</span>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('viewer')" title="Open AST Hierarchy & Assets Explorer">
+                <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('viewer', { session_id: '${sessionId || ''}' })" title="Open AST Hierarchy & Assets Explorer">
                   Full Explorer ↗
                 </button>
               </div>
@@ -346,7 +346,7 @@ window.FindingsView = {
         session_id: sessionId,
         limit: 300
       });
-      this.allFindings = res.findings || [];
+      this.allFindings = (res.findings || []).map((f) => this.normalizeFinding(f)).filter(Boolean);
       window.appState.set("activeFindings", this.allFindings);
       this.applyFilters();
 
@@ -379,7 +379,8 @@ window.FindingsView = {
 
         // Wire bi-directional synchronization from document canvas to finding details
         this.viewerInstance.onFindingSelected = (f) => {
-          this.selectFinding(f.finding_id, false);
+          const normId = f.finding_id || f.id || f.defect_id;
+          this.selectFinding(normId, false);
         };
 
         await this.viewerInstance.loadDocument(docId, this.activeDoc.page_count || 1, this.allFindings);
@@ -488,18 +489,125 @@ window.FindingsView = {
     }
   },
 
+  normalizeFinding(f) {
+    if (!f || typeof f !== "object") return null;
+
+    const cleanStr = (val, fallback = "") => {
+      if (val === null || val === undefined) return fallback;
+      const s = String(val).trim();
+      if (!s || s.toLowerCase() === "undefined" || s.toLowerCase() === "null" || s.toUpperCase() === "N/A" || s === "[object Object]") {
+        return fallback;
+      }
+      return s;
+    };
+
+    // ID: f.finding_id || f.id || f.defect_id || "FINDING-N/A"
+    const finding_id = cleanStr(f.finding_id || f.id || f.defect_id, "FINDING-N/A");
+
+    // Severity: CRITICAL, HIGH, MEDIUM, LOW, INFO
+    let rawSev = cleanStr(f.severity || f.level, "MEDIUM").toUpperCase();
+    if (rawSev === "INFORMATIONAL" || rawSev === "INFORMATION") rawSev = "INFO";
+    const validSeverities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
+    const severity = validSeverities.includes(rawSev) ? rawSev : "MEDIUM";
+
+    // Category & Issue Type: f.category || f.type || "General Compliance" and f.issue_type || f.title || f.rule_id || ""
+    const category = cleanStr(f.category || f.type, "General Compliance");
+    const issue_type = cleanStr(f.issue_type || f.title || f.rule_id, "");
+
+    // Location: Page ${f.page_number || f.page || 1} • ${f.location || f.section_title || "Document Stream"}
+    const page_number = parseInt(f.page_number || f.page || (f.location && f.location.page) || 1, 10) || 1;
+    const rawLoc = cleanStr(typeof f.location === "string" ? f.location : (f.section_title || f.section), "");
+    let location = "";
+    if (rawLoc.startsWith("Page ")) {
+      location = rawLoc;
+    } else if (rawLoc) {
+      location = `Page ${page_number} • ${rawLoc}`;
+    } else {
+      location = `Page ${page_number} • Document Stream`;
+    }
+
+    // Matched / Detected Text: f.matched_text || f.detected_value || f.original_content || f.found_text || "Highlighted region"
+    const matched_text = cleanStr(
+      f.matched_text || f.detected_value || f.original_content || f.found_text || f.text,
+      "Highlighted region"
+    );
+
+    // Expected Correction / Spec: f.suggested_fix || f.expected_text || f.expected_value || f.rule_description || "In accordance with standard spec"
+    const expected_text = cleanStr(
+      f.suggested_fix || f.expected_text || f.expected_value || f.rule_description,
+      "In accordance with standard spec"
+    );
+
+    // Technical Explanation: f.explanation || f.message || f.description || "Defect flagged during compliance scan."
+    const explanation = cleanStr(
+      f.explanation || f.message || f.description,
+      "Defect flagged during compliance scan."
+    );
+
+    // Suggested Action: f.remediation || f.suggested_fix || f.action || "Inspect and verify manually in source document."
+    const remediation = cleanStr(
+      f.remediation || f.suggested_fix || f.action || f.suggested_correction,
+      "Inspect and verify manually in source document."
+    );
+
+    // Location precision: EXACT or APPROXIMATE
+    let rawPrec = cleanStr(f.location_precision, "");
+    let location_precision = "APPROXIMATE";
+    if (rawPrec.toUpperCase().includes("EXACT")) {
+      location_precision = "EXACT";
+    } else if (rawPrec.toUpperCase().includes("APPROX")) {
+      location_precision = "APPROXIMATE";
+    } else if (f.bbox || (f.bounding_boxes && f.bounding_boxes.length > 0)) {
+      location_precision = "EXACT";
+    } else {
+      location_precision = "APPROXIMATE";
+    }
+
+    const rule_reference = cleanStr(f.rule_reference || f.rule_id || f.standard, "SpecGuard Compliance Standard");
+
+    return {
+      ...f,
+      finding_id,
+      id: finding_id,
+      defect_id: finding_id,
+      severity,
+      category,
+      issue_type,
+      page_number,
+      page: page_number,
+      location,
+      matched_text,
+      detected_value: matched_text,
+      original_content: matched_text,
+      found_text: matched_text,
+      expected_text,
+      expected_value: expected_text,
+      suggested_fix: expected_text,
+      rule_description: expected_text,
+      explanation,
+      message: explanation,
+      description: explanation,
+      remediation,
+      action: remediation,
+      suggested_correction: remediation,
+      location_precision,
+      rule_reference
+    };
+  },
+
   selectFinding(findingId, focusCanvas = true) {
-    const f = this.allFindings.find((x) => x.finding_id === findingId);
+    const f = this.allFindings.find((x) => x.finding_id === findingId || x.id === findingId || x.defect_id === findingId);
     if (!f) return;
 
-    this.selectedFinding = f;
-    window.appState.set("focusedFinding", f);
+    const norm = this.normalizeFinding(f);
+    this.selectedFinding = norm;
+    window.appState.set("focusedFinding", norm);
 
     // Update quick selector dropdown
     const quickSelect = document.getElementById("findings-quick-select");
-    if (quickSelect) quickSelect.value = findingId;
+    if (quickSelect) quickSelect.value = norm.finding_id;
 
-    const curIdx = this.filteredFindings.findIndex((x) => x.finding_id === findingId);
+    const curIdx = this.filteredFindings.findIndex((x) => x.finding_id === norm.finding_id);
     const posBadge = document.getElementById("findings-position-badge");
     if (posBadge && curIdx >= 0) {
       posBadge.textContent = `${curIdx + 1} / ${this.filteredFindings.length}`;
@@ -508,27 +616,31 @@ window.FindingsView = {
     // Update table row selection
     const rows = document.querySelectorAll("#findings-tbody tr");
     rows.forEach((r) => {
-      if (r.getAttribute("data-finding-id") === findingId) {
+      if (r.getAttribute("data-finding-id") === norm.finding_id) {
         r.classList.add("selected");
       } else {
         r.classList.remove("selected");
       }
     });
 
+    this.renderFindingDetail(norm);
+    this.updateDefectStatusHeader(norm);
+
+    if (focusCanvas && this.viewerInstance) {
+      this.viewerInstance.focusFindingById(norm.finding_id);
+    }
+
     // Fetch full finding details from API (contains enriched locations, sections, bbox, formatted region)
-    window.api.findings.get(findingId).then((fullF) => {
-      this.selectedFinding = fullF;
-      this.renderFindingDetail(fullF);
-      this.updateDefectStatusHeader(fullF);
+    window.api.findings.get(norm.finding_id).then((fullF) => {
+      const normalizedFull = this.normalizeFinding(fullF);
+      this.selectedFinding = normalizedFull;
+      this.renderFindingDetail(normalizedFull);
+      this.updateDefectStatusHeader(normalizedFull);
       if (focusCanvas && this.viewerInstance) {
-        this.viewerInstance.focusFinding(fullF);
+        this.viewerInstance.focusFindingById(normalizedFull.finding_id);
       }
     }).catch(() => {
-      this.renderFindingDetail(f);
-      this.updateDefectStatusHeader(f);
-      if (focusCanvas && this.viewerInstance) {
-        this.viewerInstance.focusFinding(f);
-      }
+      // Already rendered with norm
     });
   },
 
@@ -604,19 +716,23 @@ window.FindingsView = {
   renderFindingDetail(f) {
     const col = document.getElementById("findings-info-column");
     if (!col) return;
+    if (!f) {
+      this.renderEmptyFindingDetail();
+      return;
+    }
 
-    const normSev = (f.severity || "LOW").toUpperCase();
-    const sevClass = (normSev === "INFORMATIONAL" || normSev === "INFO") ? "badge-info" : `badge-${normSev.toLowerCase()}`;
-    const precision = f.location_precision || "APPROXIMATE";
+    const norm = this.normalizeFinding(f);
+    const sevClass = (norm.severity === "INFO") ? "badge-info" : `badge-${norm.severity.toLowerCase()}`;
+    const precision = norm.location_precision;
 
     // Finding Index Number
-    const fIdx = this.allFindings.findIndex((x) => x.finding_id === f.finding_id);
+    const fIdx = this.allFindings.findIndex((x) => x.finding_id === norm.finding_id || x.id === norm.finding_id);
     const findingNum = fIdx >= 0 ? (fIdx + 1).toString().padStart(2, "0") : "01";
 
     // Multi-Locations Support (Section 15)
     let multiLocationsHtml = "";
-    if (f.locations && f.locations.length > 1) {
-      const locButtons = f.locations.map((loc, idx) => {
+    if (norm.locations && norm.locations.length > 1) {
+      const locButtons = norm.locations.map((loc, idx) => {
         return `
           <button class="multi-location-btn" onclick="window.FindingsView.goToLocation(${loc.page})">
             📍 ${escapeHtml(loc.label || `Location ${idx + 1} (Page ${loc.page})`)}
@@ -636,7 +752,7 @@ window.FindingsView = {
 
     // Missing Content Alert (Section 14)
     let missingContentHtml = "";
-    const isMissing = !f.bbox || (f.issue_type && f.issue_type.includes("MISSING"));
+    const isMissing = !norm.bbox || (norm.issue_type && norm.issue_type.includes("MISSING"));
     if (isMissing) {
       missingContentHtml = `
         <div class="missing-content-alert">
@@ -645,7 +761,7 @@ window.FindingsView = {
             <span>EXPECTED CONTENT NOT FOUND</span>
           </div>
           <div class="missing-alert-target">
-            ${escapeHtml(String(f.expected_value || f.expected_text || f.finding_id))}
+            ${escapeHtml(norm.expected_text)}
           </div>
           <div class="missing-alert-note">
             Expected object not detected here. Exact visual coordinates unavailable.
@@ -654,20 +770,16 @@ window.FindingsView = {
       `;
     }
 
-    // Detected & Expected formatting blocks (Section 8, 9, 10)
-    const detectedVal = String(f.detected_value || f.matched_text || f.original_content || "N/A");
-    const expectedVal = String(f.expected_value || f.expected_text || "Conforming specification standard");
-
     col.innerHTML = `
       <!-- Header: Finding Code & Navigation -->
       <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-default); padding-bottom: 10px;">
         <div>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="finding-code-id" style="font-size: 17px; color: var(--accent-primary);">[${findingNum}] ${escapeHtml(f.finding_id)}</span>
-            <span class="badge ${sevClass}">${f.severity}</span>
+            <span class="finding-code-id" style="font-size: 17px; color: var(--accent-primary);">[${findingNum}] ${escapeHtml(norm.finding_id)}</span>
+            <span class="badge ${sevClass}">${escapeHtml(norm.severity)}</span>
           </div>
           <div style="font-size: 12.5px; font-weight: 700; color: var(--text-secondary); margin-top: 2px;">
-            ${escapeHtml(f.category)} ${f.issue_type ? `• ${escapeHtml(f.issue_type)}` : ''}
+            ${escapeHtml(norm.category)}${norm.issue_type ? ` • ${escapeHtml(norm.issue_type)}` : ''}
           </div>
         </div>
         <div style="display: flex; gap: 4px;">
@@ -691,23 +803,23 @@ window.FindingsView = {
         <div class="defect-location-grid">
           <div class="defect-location-row">
             <span class="defect-location-label">Page:</span>
-            <span class="defect-location-value">${f.page_number || f.page || "Not available"}</span>
+            <span class="defect-location-value">${norm.page_number}</span>
           </div>
           <div class="defect-location-row">
             <span class="defect-location-label">Section:</span>
-            <span class="defect-location-value">${escapeHtml(f.section || "Not available")}</span>
+            <span class="defect-location-value">${escapeHtml(norm.section || norm.section_title || "Document Stream")}</span>
           </div>
           <div class="defect-location-row">
             <span class="defect-location-label">Paragraph:</span>
-            <span class="defect-location-value">${escapeHtml(f.paragraph || "Not available")}</span>
+            <span class="defect-location-value">${escapeHtml(norm.paragraph || "Paragraph Context")}</span>
           </div>
           <div class="defect-location-row">
             <span class="defect-location-label">Object:</span>
-            <span class="defect-location-value">${escapeHtml(f.object_type || "Not available")}</span>
+            <span class="defect-location-value">${escapeHtml(norm.object_type || norm.category)}</span>
           </div>
           <div class="defect-location-region">
             <span style="font-weight: 700; color: var(--text-muted); margin-right: 4px;">Region:</span>
-            <code>${escapeHtml(f.region_formatted || "Exact visual coordinates unavailable")}</code>
+            <code>${escapeHtml(norm.region_formatted || (norm.location_precision === "EXACT" ? "Exact visual coordinates" : "Document Stream"))}</code>
           </div>
         </div>
       </div>
@@ -722,7 +834,7 @@ window.FindingsView = {
       <div class="inspection-section">
         <span class="inspection-section-label">WHAT IS WRONG</span>
         <div class="inspection-explanation-text" style="font-weight: 600;">
-          ${escapeHtml(f.explanation || f.message || "Defect detected in document content or styling.")}
+          ${escapeHtml(norm.explanation)}
         </div>
       </div>
 
@@ -730,11 +842,11 @@ window.FindingsView = {
       <div class="inspection-comparison-grid">
         <div class="comparison-box detected">
           <span class="comparison-label">CURRENT / DETECTED</span>
-          <div class="comparison-value">${escapeHtml(detectedVal)}</div>
+          <div class="comparison-value">${escapeHtml(norm.matched_text)}</div>
         </div>
         <div class="comparison-box expected">
           <span class="comparison-label">EXPECTED SPECIFICATION</span>
-          <div class="comparison-value">${escapeHtml(expectedVal)}</div>
+          <div class="comparison-value">${escapeHtml(norm.expected_text)}</div>
         </div>
       </div>
 
@@ -742,7 +854,7 @@ window.FindingsView = {
       <div class="inspection-section">
         <span class="inspection-section-label">WHY THIS FAILED</span>
         <div class="inspection-explanation-text">
-          ${escapeHtml(f.explanation || "Does not conform to the required engineering specifications or design guidelines.")}
+          ${escapeHtml(norm.explanation)}
         </div>
       </div>
 
@@ -750,7 +862,7 @@ window.FindingsView = {
       <div class="inspection-remediation-box">
         <div class="remediation-notice">Suggested Action (Information Only)</div>
         <div class="remediation-guidance">
-          💡 ${escapeHtml(f.suggested_correction || f.suggested_fix || "Review the discrepancy and correct it in your original source document.")}
+          💡 ${escapeHtml(norm.remediation)}
         </div>
       </div>
 
@@ -758,19 +870,19 @@ window.FindingsView = {
       <div class="inspection-meta-grid">
         <div class="meta-item">
           <span class="meta-item-label">Rule / Standard</span>
-          <span class="meta-item-val">${escapeHtml(f.rule_reference || f.rule_id || "SpecGuard Core Rules")}</span>
+          <span class="meta-item-val">${escapeHtml(norm.rule_reference)}</span>
         </div>
         <div class="meta-item">
           <span class="meta-item-label">Analyzer Engine</span>
-          <span class="meta-item-val">${escapeHtml(f.source_analyzer || "Inspection Engine")}</span>
+          <span class="meta-item-val">${escapeHtml(norm.source_analyzer || norm.category || "Inspection Engine")}</span>
         </div>
         <div class="meta-item">
           <span class="meta-item-label">Location Precision</span>
-          <span class="meta-item-val">${escapeHtml(precision)}</span>
+          <span class="meta-item-val"><span class="badge ${precision === 'EXACT' ? 'badge-success' : 'badge-outline'}">${escapeHtml(precision)}</span></span>
         </div>
         <div class="meta-item">
           <span class="meta-item-label">Confidence Score</span>
-          <span class="meta-item-val">${Math.round((f.confidence || 1.0) * 100)}%</span>
+          <span class="meta-item-val">${Math.round((norm.confidence || 1.0) * 100)}%</span>
         </div>
       </div>
     `;

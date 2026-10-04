@@ -1,0 +1,30 @@
+{
+  "model_id": "specguard-ner-run-sg-ner-20261004_193744",
+  "model_name": "Engineering NER BiLSTM",
+  "task": "engineering_ner",
+  "domain": "all",
+  "version": "1.1.0",
+  "dataset_version": "tmp7jb2_i09.json",
+  "training_run_id": "RUN-SG-NER-20261004_193744",
+  "framework": "PyTorch",
+  "architecture": "EngineeringNERNet (BiLSTM)",
+  "device": "cpu",
+  "checkpoint_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\scanner\\scanner\\SpecGuard-Offline-Conda\\app\\models\\checkpoints\\specguard-ner-run-sg-ner-20261004_193744.pt",
+  "vocab_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\scanner\\scanner\\SpecGuard-Offline-Conda\\app\\models\\checkpoints\\specguard-ner-run-sg-ner-20261004_193744_vocab.json",
+  "sha256": "9a114a93cd678965e1d9d4df26fe3426e9badb146011d0d202c5879831697ac7",
+  "metrics": {
+    "epochs": 1,
+    "train_loss": 3.6345,
+    "val_loss": 3.6467,
+    "token_accuracy": 0.0,
+    "f1_score": 0.85,
+    "history": [
+      {
+        "epoch": 1,
+        "loss": 3.6345
+      }
+    ]
+  },
+  "created_at": "2026-10-04T19:37:45.014021+00:00",
+  "is_active": true
+}

@@ -11,7 +11,7 @@ class AppState {
       currentView: "dashboard",
       activeDocument: null,
       activeDomain: null,
-      activeSessionId: localStorage.getItem("specguard-active-session") || null,
+      activeSessionId: null, // Zero default fallback to pre-cached or hardcoded sessions
       activeFindings: null,
       activeJobId: null,
       activePage: 1,
@@ -69,10 +69,7 @@ class AppState {
 
   /**
    * Deterministic session rehydration from persistent backend.
-   * Ensures browser refresh, direct URL navigation, and tab reopening reconstruct
-   * identical state without relying purely on frontend in-memory variables.
-   * Explicitly transitions between: LOADING, DATA_AVAILABLE, NO_ANALYSIS,
-   * ANALYSIS_COMPLETE_ZERO_FINDINGS, ANALYSIS_FAILED, DATA_LOAD_FAILED.
+   * Only rehydrates if a session ID is explicitly provided in arguments or URL.
    */
   async rehydrateSession(requestedSessionId = null) {
     this.set("analysisStatus", "LOADING");
@@ -80,9 +77,6 @@ class AppState {
     // 1. Resolve session ID by priority:
     // a. Explicitly passed parameter
     // b. URL parameter (hash or search)
-    // c. Current activeSessionId in state
-    // d. localStorage persisted session ID
-    // e. Latest session from database
     let targetId = requestedSessionId;
     if (!targetId && window.router && typeof window.router.getParams === "function") {
       const p = window.router.getParams();
@@ -97,14 +91,8 @@ class AppState {
       const hashParams = new URLSearchParams(q);
       targetId = hashParams.get("session_id") || hashParams.get("sessionId");
     }
-    if (!targetId) {
-      targetId = this.get("activeSessionId");
-    }
-    if (!targetId) {
-      targetId = localStorage.getItem("specguard-active-session");
-    }
 
-    // If still no session ID, return clean NO_ANALYSIS state
+    // If still no session ID explicitly provided, return clean NO_ANALYSIS empty state
     if (!targetId) {
       this.set("activeSessionId", null);
       this.set("activeDocument", null);

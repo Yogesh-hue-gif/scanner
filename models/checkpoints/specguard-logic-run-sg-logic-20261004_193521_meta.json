@@ -1,0 +1,28 @@
+{
+  "model_id": "specguard-logic-run-sg-logic-20261004_193521",
+  "model_name": "Logical Contradiction SiameseNet",
+  "task": "logical_contradiction",
+  "domain": "all",
+  "version": "1.1.0",
+  "dataset_version": "tmpdn53f0d0.json",
+  "training_run_id": "RUN-SG-LOGIC-20261004_193521",
+  "framework": "PyTorch",
+  "architecture": "LogicalRelationNet",
+  "device": "cpu",
+  "checkpoint_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\scanner\\scanner\\SpecGuard-Offline-Conda\\app\\models\\checkpoints\\specguard-logic-run-sg-logic-20261004_193521.pt",
+  "vocab_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\scanner\\scanner\\SpecGuard-Offline-Conda\\app\\models\\checkpoints\\specguard-logic-run-sg-logic-20261004_193521_vocab.json",
+  "sha256": "ec4d4a860d56335cb582e11149995a363e610e84a92a8b5e690d8c6582a0c49f",
+  "metrics": {
+    "epochs": 1,
+    "train_loss": 0.7054,
+    "accuracy": 0.5,
+    "history": [
+      {
+        "epoch": 1,
+        "loss": 0.7054
+      }
+    ]
+  },
+  "created_at": "2026-10-04T19:35:21.804700+00:00",
+  "is_active": true
+}

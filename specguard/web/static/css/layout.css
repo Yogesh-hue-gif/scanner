@@ -138,22 +138,34 @@
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  padding: 10px 8px;
-  gap: 4px;
+  padding: 6px 6px;
+  gap: 2px;
   flex: 1;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
 }
 
 .nav-section-title {
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.85px;
   color: var(--text-muted);
   text-transform: uppercase;
-  padding: 10px 12px 4px;
+  padding: 8px 8px 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
 }
 
 .app-sidebar.collapsed .nav-section-title {
@@ -163,12 +175,12 @@
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 9px 12px;
+  gap: 10px;
+  padding: 7px 10px;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12.5px;
   cursor: pointer;
   border: 1px solid transparent;
   transition: all var(--transition-fast);

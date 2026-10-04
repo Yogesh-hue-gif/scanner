@@ -43,11 +43,35 @@ class DocumentViewerComponent {
     this.activeTab = "pages";
   }
 
+  renderEmptyState(title = "No Document Loaded", message = "No document or analysis session is currently loaded. Please start a new inspection or select a document from history.") {
+    if (!this.container) return;
+    this.container.innerHTML = `
+      <div class="empty-state" style="padding: 70px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 440px; background: var(--bg-surface); border: 1px dashed var(--border-default); border-radius: var(--radius-lg); margin: 12px;">
+        <div class="empty-state-icon" style="font-size: 52px; margin-bottom: 16px; opacity: 0.85;">📄</div>
+        <h3 class="empty-state-title" style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">${escapeHtml(title)}</h3>
+        <p class="empty-state-desc" style="font-size: 13.5px; color: var(--text-muted); max-width: 480px; line-height: 1.5; margin-bottom: 24px;">${escapeHtml(message)}</p>
+        <div style="display: flex; gap: 12px;">
+          <button class="btn btn-primary" onclick="window.router.navigate('new_analysis')">
+            ⚡ Start New Analysis
+          </button>
+          <button class="btn btn-secondary" onclick="window.router.navigate('history')">
+            📁 Analysis History
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   async loadDocument(docId, totalPages = 1, findings = []) {
+    if (!docId) {
+      this.renderEmptyState("No Document Loaded", "No document or analysis session is currently active. Please upload an engineering document or choose an existing inspection.");
+      return;
+    }
+
     this.docId = docId;
     this.totalPages = totalPages;
     this.currentPage = 1;
-    this.findings = findings || [];
+    this.findings = (findings || []).map((f) => this.normalizeFinding(f)).filter(Boolean);
     this.activeTab = "pages";
     this.docDetails = null;
     this.focusedFinding = null;
@@ -90,6 +114,14 @@ class DocumentViewerComponent {
     this.updateToolbar();
     this._initScrollObserver();
     this._initResizeObserver();
+
+    // Auto-select first finding so error specifications are immediately visible in the details drawer
+    const initialFindings = this.getFilteredFindings();
+    if (initialFindings.length > 0) {
+      setTimeout(() => {
+        this.selectFinding(initialFindings[0]);
+      }, 60);
+    }
   }
 
   setPage(pageNum) {
@@ -181,10 +213,126 @@ class DocumentViewerComponent {
     });
   }
 
+  normalizeFinding(f) {
+    if (!f || typeof f !== "object") return null;
+
+    const cleanStr = (val, fallback = "") => {
+      if (val === null || val === undefined) return fallback;
+      const s = String(val).trim();
+      if (!s || s.toLowerCase() === "undefined" || s.toLowerCase() === "null" || s.toUpperCase() === "N/A" || s === "[object Object]") {
+        return fallback;
+      }
+      return s;
+    };
+
+    // ID: f.finding_id || f.id || f.defect_id || "FINDING-N/A"
+    const finding_id = cleanStr(f.finding_id || f.id || f.defect_id, "FINDING-N/A");
+
+    // Severity: CRITICAL, HIGH, MEDIUM, LOW, INFO
+    let rawSev = cleanStr(f.severity || f.level, "MEDIUM").toUpperCase();
+    if (rawSev === "INFORMATIONAL" || rawSev === "INFORMATION") rawSev = "INFO";
+    const validSeverities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
+    const severity = validSeverities.includes(rawSev) ? rawSev : "MEDIUM";
+
+    // Category & Issue Type: f.category || f.type || "General Compliance" and f.issue_type || f.title || f.rule_id || ""
+    const category = cleanStr(f.category || f.type, "General Compliance");
+    const issue_type = cleanStr(f.issue_type || f.title || f.rule_id, "");
+
+    // Location: Page ${f.page_number || f.page || 1} • ${f.location || f.section_title || "Document Stream"}
+    const page_number = parseInt(f.page_number || f.page || (f.location && f.location.page) || 1, 10) || 1;
+    const rawLoc = cleanStr(typeof f.location === "string" ? f.location : (f.section_title || f.section), "");
+    let location = "";
+    if (rawLoc.startsWith("Page ")) {
+      location = rawLoc;
+    } else if (rawLoc) {
+      location = `Page ${page_number} • ${rawLoc}`;
+    } else {
+      location = `Page ${page_number} • Document Stream`;
+    }
+
+    // Matched / Detected Text: f.matched_text || f.detected_value || f.original_content || f.found_text || "Highlighted region"
+    const matched_text = cleanStr(
+      f.matched_text || f.detected_value || f.original_content || f.found_text || f.text,
+      "Highlighted region"
+    );
+
+    // Expected Correction / Spec: f.suggested_fix || f.expected_text || f.expected_value || f.rule_description || "In accordance with standard spec"
+    const expected_text = cleanStr(
+      f.suggested_fix || f.expected_text || f.expected_value || f.rule_description,
+      "In accordance with standard spec"
+    );
+
+    // Technical Explanation: f.explanation || f.message || f.description || "Defect flagged during compliance scan."
+    const explanation = cleanStr(
+      f.explanation || f.message || f.description,
+      "Defect flagged during compliance scan."
+    );
+
+    // Suggested Action: f.remediation || f.suggested_fix || f.action || "Inspect and verify manually in source document."
+    const remediation = cleanStr(
+      f.remediation || f.suggested_fix || f.action || f.suggested_correction,
+      "Inspect and verify manually in source document."
+    );
+
+    // Location precision: EXACT or APPROXIMATE
+    let rawPrec = cleanStr(f.location_precision, "");
+    let location_precision = "APPROXIMATE";
+    if (rawPrec.toUpperCase().includes("EXACT")) {
+      location_precision = "EXACT";
+    } else if (rawPrec.toUpperCase().includes("APPROX")) {
+      location_precision = "APPROXIMATE";
+    } else if (f.bbox || (f.bounding_boxes && f.bounding_boxes.length > 0)) {
+      location_precision = "EXACT";
+    } else {
+      location_precision = "APPROXIMATE";
+    }
+
+    const rule_reference = cleanStr(f.rule_reference || f.rule_id || f.standard, "SpecGuard Compliance Standard");
+
+    return {
+      ...f,
+      finding_id,
+      id: finding_id,
+      defect_id: finding_id,
+      severity,
+      category,
+      issue_type,
+      page_number,
+      page: page_number,
+      location,
+      matched_text,
+      detected_value: matched_text,
+      original_content: matched_text,
+      found_text: matched_text,
+      expected_text,
+      expected_value: expected_text,
+      suggested_fix: expected_text,
+      rule_description: expected_text,
+      explanation,
+      message: explanation,
+      description: explanation,
+      remediation,
+      action: remediation,
+      suggested_correction: remediation,
+      location_precision,
+      rule_reference
+    };
+  }
+
+  getSeverityColor(sev) {
+    const s = (sev || "MEDIUM").toUpperCase();
+    if (s === "CRITICAL") return "#dc2626";
+    if (s === "HIGH") return "#ea580c";
+    if (s === "MEDIUM") return "#f59e0b";
+    if (s === "LOW") return "#3b82f6";
+    return "#64748b";
+  }
+
   focusFinding(finding) {
     if (!finding) return;
-    this.focusedFinding = finding;
-    const targetPage = parseInt(finding.page_number || finding.page || 1, 10);
+    const norm = this.normalizeFinding(finding);
+    this.focusedFinding = norm;
+    const targetPage = norm.page_number;
     if (targetPage >= 1 && targetPage <= this.totalPages) {
       this.currentPage = targetPage;
     }
@@ -200,13 +348,13 @@ class DocumentViewerComponent {
     this.renderSidebarContent();
 
     if (this.options.showDrawer) {
-      this.showFindingInDrawer(finding);
+      this.showFindingInDrawer(norm);
     }
 
     // Smoothly scroll defect directly into view in the document viewport
     setTimeout(() => {
       const viewportEl = this.container.querySelector("#viewer-canvas-viewport");
-      const groupEl = this.container.querySelector(`[data-finding-id="${finding.finding_id}"]`);
+      const groupEl = this.container.querySelector(`[data-finding-id="${norm.finding_id}"]`);
       const pageEl = this.container.querySelector(`#page-container-${targetPage}`);
 
       if (groupEl && viewportEl && pageEl) {
@@ -272,34 +420,14 @@ class DocumentViewerComponent {
   }
 
   focusFindingById(findingId) {
-    const target = this.findings.find((f) => f.finding_id === findingId);
+    if (!findingId) return;
+    const target = this.findings.find((f) => 
+      f.finding_id === findingId || f.id === findingId || f.defect_id === findingId
+    );
     if (target) {
+      this.selectFinding(target);
       this.focusFinding(target);
     }
-  }
-
-  nextFinding() {
-    const list = this.getFilteredFindings();
-    if (list.length === 0) return;
-    if (!this.focusedFinding) {
-      this.focusFinding(list[0]);
-      return;
-    }
-    const idx = list.findIndex((f) => f.finding_id === this.focusedFinding.finding_id);
-    const nextIdx = (idx + 1) % list.length;
-    this.focusFinding(list[nextIdx]);
-  }
-
-  prevFinding() {
-    const list = this.getFilteredFindings();
-    if (list.length === 0) return;
-    if (!this.focusedFinding) {
-      this.focusFinding(list[list.length - 1]);
-      return;
-    }
-    const idx = list.findIndex((f) => f.finding_id === this.focusedFinding.finding_id);
-    const prevIdx = (idx - 1 + list.length) % list.length;
-    this.focusFinding(list[prevIdx]);
   }
 
   render() {
@@ -309,12 +437,13 @@ class DocumentViewerComponent {
       <div class="viewer-layout">
         <!-- LEFT: Page Navigation Sidebar with Multi-Page Tabs -->
         <div class="viewer-pages-sidebar" style="${this.options.showSidebar ? '' : 'display: none;'}">
-          <div class="viewer-sidebar-tabs" style="display: flex; border-bottom: 1px solid var(--border-default); background: var(--bg-surface-sunken); flex-shrink: 0;">
-            <button class="v-tab ${this.activeTab === 'pages' ? 'active' : ''}" data-tab="pages" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'pages' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'pages' ? 'var(--accent-primary)' : 'transparent'};">Pages</button>
-            <button class="v-tab ${this.activeTab === 'structure' ? 'active' : ''}" data-tab="structure" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'structure' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'structure' ? 'var(--accent-primary)' : 'transparent'};">Tree</button>
-            <button class="v-tab ${this.activeTab === 'toc' ? 'active' : ''}" data-tab="toc" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'toc' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'toc' ? 'var(--accent-primary)' : 'transparent'};">TOC</button>
-            <button class="v-tab ${this.activeTab === 'assets' ? 'active' : ''}" data-tab="assets" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'assets' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'assets' ? 'var(--accent-primary)' : 'transparent'};">Assets</button>
-            <button class="v-tab ${this.activeTab === 'xrefs' ? 'active' : ''}" data-tab="xrefs" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'xrefs' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'xrefs' ? 'var(--accent-primary)' : 'transparent'};">Refs</button>
+          <div class="viewer-sidebar-tabs" style="display: flex; border-bottom: 1px solid var(--border-default); background: var(--bg-surface-sunken); flex-shrink: 0; overflow-x: auto;">
+            <button class="v-tab ${this.activeTab === 'pages' ? 'active' : ''}" data-tab="pages" style="flex: 1; min-width: 48px; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'pages' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'pages' ? 'var(--accent-primary)' : 'transparent'};">Pages</button>
+            <button class="v-tab ${this.activeTab === 'defects' ? 'active' : ''}" data-tab="defects" style="flex: 1; min-width: 52px; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'defects' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'defects' ? 'var(--accent-primary)' : 'transparent'};">Defects</button>
+            <button class="v-tab ${this.activeTab === 'structure' ? 'active' : ''}" data-tab="structure" style="flex: 1; min-width: 54px; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'structure' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'structure' ? 'var(--accent-primary)' : 'transparent'};">Structure</button>
+            <button class="v-tab ${this.activeTab === 'toc' ? 'active' : ''}" data-tab="toc" style="flex: 1; min-width: 52px; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'toc' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'toc' ? 'var(--accent-primary)' : 'transparent'};">Contents</button>
+            <button class="v-tab ${this.activeTab === 'assets' ? 'active' : ''}" data-tab="assets" style="flex: 1; min-width: 46px; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'assets' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'assets' ? 'var(--accent-primary)' : 'transparent'};">Assets</button>
+            <button class="v-tab ${this.activeTab === 'xrefs' ? 'active' : ''}" data-tab="xrefs" style="flex: 1; min-width: 65px; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'xrefs' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'xrefs' ? 'var(--accent-primary)' : 'transparent'};">References</button>
           </div>
           <div class="pages-list" id="viewer-pages-list" style="overflow-y: auto; flex: 1; padding: 6px; min-height: 0;"></div>
         </div>
@@ -679,11 +808,48 @@ class DocumentViewerComponent {
         item.className = `page-thumb-item ${i === this.currentPage ? "active" : ""}`;
         item.innerHTML = `
           <span>Page ${i}</span>
-          ${findingsOnPage.length > 0 ? `<span class="badge badge-critical" style="font-size: 9.5px; padding: 1px 5px;">${findingsOnPage.length}</span>` : ""}
+          ${findingsOnPage.length > 0 ? `<span class="badge badge-critical" style="font-size: 9.5px; padding: 1px 5px;" title="${findingsOnPage.length} defect(s) on Page ${i}">${findingsOnPage.length}</span>` : ""}
         `;
-        item.onclick = () => this.setPage(i);
+        item.onclick = () => {
+          this.setPage(i);
+          if (findingsOnPage.length > 0) {
+            this.focusFinding(findingsOnPage[0]);
+          }
+        };
         listEl.appendChild(item);
       }
+    } else if (this.activeTab === "defects") {
+      if (activeFindings.length === 0) {
+        listEl.innerHTML = `<div style="padding: 16px; font-size: 11.5px; color: var(--text-muted); text-align: center;">No defects matching active filters.</div>`;
+        return;
+      }
+      activeFindings.forEach((f, idx) => {
+        const isSelected = this.focusedFinding && (this.focusedFinding.finding_id === f.finding_id || this.focusedFinding.id === f.finding_id);
+        const item = document.createElement("div");
+        item.className = `finding-tree-item ${isSelected ? 'active' : ''}`;
+        item.style.cssText = `padding: 8px 10px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 4px; background: ${isSelected ? 'var(--bg-surface-elevated)' : 'var(--bg-surface-sunken)'}; border-left: 3px solid ${this.getSeverityColor(f.severity)}; display: flex; flex-direction: column; gap: 3px; border: 1px solid ${isSelected ? 'var(--border-focus)' : 'var(--border-default)'};`;
+        const num = (idx + 1).toString().padStart(2, "0");
+        const sevClass = (f.severity === "INFO") ? "badge-info" : `badge-${f.severity.toLowerCase()}`;
+        item.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 800; color: var(--text-primary);">[${num}] ${escapeHtml(f.finding_id)}</span>
+            <div style="display: flex; gap: 4px;">
+              <span class="badge ${sevClass}" style="font-size: 8.5px; padding: 1px 4px;">${escapeHtml(f.severity)}</span>
+              <span class="badge badge-outline" style="font-size: 8.5px; padding: 1px 4px;">P.${f.page_number || f.page}</span>
+            </div>
+          </div>
+          <div style="font-size: 10.5px; color: var(--text-secondary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+            ${escapeHtml(f.category)} • ${escapeHtml(f.issue_type || f.explanation)}
+          </div>
+          <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+            "${escapeHtml(f.matched_text)}"
+          </div>
+        `;
+        item.onclick = () => {
+          this.focusFindingById(f.finding_id);
+        };
+        listEl.appendChild(item);
+      });
     } else if (this.activeTab === "structure") {
       const sections = this.docDetails?.sections || [];
       if (sections.length === 0) {
@@ -692,12 +858,12 @@ class DocumentViewerComponent {
       }
       sections.forEach((sec) => {
         const item = document.createElement("div");
-        item.style.cssText = `padding: 6px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; background: ${sec.page_num === this.currentPage ? 'var(--bg-surface-elevated)' : 'transparent'}; border-left: ${sec.level === 1 ? '3px solid var(--accent-primary)' : '1px solid var(--border-default)'}; margin-left: ${(sec.level - 1) * 10}px;`;
+        item.style.cssText = `padding: 6px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; background: ${sec.page_num === this.currentPage ? 'var(--bg-surface-elevated)' : 'transparent'}; border-left: ${sec.level === 1 ? '3px solid var(--accent-primary)' : '1px solid var(--border-default)'}; margin-left: ${(sec.level - 1) * 8}px; min-width: 0; overflow: hidden;`;
         item.innerHTML = `
-          <span style="font-weight: ${sec.level === 1 ? '700' : '500'}; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 140px;">
-            ${sec.number_str ? sec.number_str + ' ' : ''}${sec.title}
+          <span style="font-weight: ${sec.level === 1 ? '700' : '500'}; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 0; flex: 1; margin-right: 6px;" title="${escapeHtml((sec.number_str ? sec.number_str + ' ' : '') + sec.title)}">
+            ${escapeHtml((sec.number_str ? sec.number_str + ' ' : '') + sec.title)}
           </span>
-          <span class="badge badge-outline" style="font-size: 9px;">P.${sec.page_num}</span>
+          <span class="badge badge-outline" style="font-size: 9px; flex-shrink: 0;">P.${sec.page_num}</span>
         `;
         item.onclick = () => this.setPage(sec.page_num);
         listEl.appendChild(item);
@@ -710,10 +876,10 @@ class DocumentViewerComponent {
       }
       toc.items.forEach((item) => {
         const el = document.createElement("div");
-        el.style.cssText = `padding: 6px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; margin-left: ${(item.level - 1) * 8}px;`;
+        el.style.cssText = `padding: 6px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; margin-left: ${(item.level - 1) * 8}px; min-width: 0; overflow: hidden;`;
         el.innerHTML = `
-          <span style="font-weight: ${item.level === 1 ? '700' : '500'}; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 140px;">${item.title}</span>
-          <span class="badge badge-domain" style="font-size: 9px;">P.${item.target_page_num || item.page_num}</span>
+          <span style="font-weight: ${item.level === 1 ? '700' : '500'}; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 0; flex: 1; margin-right: 6px;" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span>
+          <span class="badge badge-domain" style="font-size: 9px; flex-shrink: 0;">P.${item.target_page_num || item.page_num}</span>
         `;
         el.onclick = () => this.setPage(item.target_page_num || item.page_num);
         listEl.appendChild(el);
@@ -739,8 +905,8 @@ class DocumentViewerComponent {
         addAssetHeader(`Figures (${figures.length})`);
         figures.forEach((fig) => {
           const el = document.createElement("div");
-          el.style.cssText = "padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center;";
-          el.innerHTML = `<span>📊 ${fig.label || 'Figure'}</span><span class="badge badge-outline" style="font-size: 9px;">P.${fig.page_num}</span>`;
+          el.style.cssText = "padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; min-width: 0; overflow: hidden;";
+          el.innerHTML = `<span style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 0; flex: 1; margin-right: 6px;">📊 ${escapeHtml(fig.label || 'Figure')}</span><span class="badge badge-outline" style="font-size: 9px; flex-shrink: 0;">P.${fig.page_num}</span>`;
           el.onclick = () => this.setPage(fig.page_num);
           listEl.appendChild(el);
         });
@@ -750,8 +916,8 @@ class DocumentViewerComponent {
         addAssetHeader(`Tables (${tables.length})`);
         tables.forEach((tbl) => {
           const el = document.createElement("div");
-          el.style.cssText = "padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center;";
-          el.innerHTML = `<span>📋 ${tbl.label || 'Table'}</span><span class="badge badge-outline" style="font-size: 9px;">P.${tbl.page_num}</span>`;
+          el.style.cssText = "padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; min-width: 0; overflow: hidden;";
+          el.innerHTML = `<span style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 0; flex: 1; margin-right: 6px;">📋 ${escapeHtml(tbl.label || 'Table')}</span><span class="badge badge-outline" style="font-size: 9px; flex-shrink: 0;">P.${tbl.page_num}</span>`;
           el.onclick = () => this.setPage(tbl.page_num);
           listEl.appendChild(el);
         });
@@ -761,8 +927,8 @@ class DocumentViewerComponent {
         addAssetHeader(`Equations (${equations.length})`);
         equations.forEach((eq) => {
           const el = document.createElement("div");
-          el.style.cssText = "padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center;";
-          el.innerHTML = `<span>∑ ${eq.label || 'Equation'}</span><span class="badge badge-outline" style="font-size: 9px;">P.${eq.page_num}</span>`;
+          el.style.cssText = "padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; min-width: 0; overflow: hidden;";
+          el.innerHTML = `<span style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 0; flex: 1; margin-right: 6px;">∑ ${escapeHtml(eq.label || 'Equation')}</span><span class="badge badge-outline" style="font-size: 9px; flex-shrink: 0;">P.${eq.page_num}</span>`;
           el.onclick = () => this.setPage(eq.page_num);
           listEl.appendChild(el);
         });
@@ -775,10 +941,10 @@ class DocumentViewerComponent {
       }
       xrefs.forEach((xr) => {
         const el = document.createElement("div");
-        el.style.cssText = "padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center;";
+        el.style.cssText = "padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: var(--radius-sm); margin-bottom: 2px; display: flex; justify-content: space-between; align-items: center; min-width: 0; overflow: hidden;";
         el.innerHTML = `
-          <span style="font-weight: 600;">${xr.mention_text}</span>
-          <span class="badge ${xr.is_resolved ? 'badge-success' : 'badge-danger'}" style="font-size: 8.5px;">
+          <span style="font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; min-width: 0; flex: 1; margin-right: 6px;">${escapeHtml(xr.mention_text)}</span>
+          <span class="badge ${xr.is_resolved ? 'badge-success' : 'badge-danger'}" style="font-size: 8.5px; flex-shrink: 0;">
             ${xr.is_resolved ? '✓ OK' : '⚠ Broken'} (P.${xr.source_page})
           </span>
         `;
@@ -857,8 +1023,10 @@ class DocumentViewerComponent {
       const boxes = (f.bounding_boxes && f.bounding_boxes.length > 0) ? f.bounding_boxes : [f.bbox];
 
       const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      group.setAttribute("class", `finding-annotation-group ${isFocused ? "focused" : ""}`);
+      group.setAttribute("class", `finding-annotation-group finding-marker ${isFocused ? "focused" : ""}`);
       group.setAttribute("data-finding-id", f.finding_id);
+      group.style.cursor = "pointer";
+      group.style.pointerEvents = "all";
 
       const titleEl = document.createElementNS("http://www.w3.org/2000/svg", "title");
       titleEl.textContent = `[${f.severity}] Finding #${findingNum} (${f.finding_id}): ${f.issue_type || f.category}\n` +
@@ -884,27 +1052,45 @@ class DocumentViewerComponent {
         hitRect.setAttribute("height", h);
         hitRect.setAttribute("rx", "2");
         hitRect.setAttribute("ry", "2");
-        hitRect.setAttribute("class", `annotation-interactive-box ${isFocused ? "focused" : ""}`);
+        hitRect.setAttribute("class", `annotation-interactive-box finding-bbox finding-marker ${isFocused ? "focused" : ""}`);
         hitRect.setAttribute("fill", sevColor.stroke);
         hitRect.setAttribute("fill-opacity", isFocused ? "0.22" : "0.06");
         hitRect.setAttribute("stroke", sevColor.stroke);
         hitRect.setAttribute("stroke-opacity", isFocused ? "0.8" : "0.15");
         hitRect.setAttribute("stroke-width", isFocused ? "1.5" : "0.5");
+        hitRect.style.cursor = "pointer";
+        hitRect.style.pointerEvents = "all";
+        hitRect.onclick = (e) => {
+          e.stopPropagation();
+          this.selectFinding(f);
+        };
         group.appendChild(hitRect);
 
         if (isSpelling) {
           const wavePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
           wavePath.setAttribute("d", this.generateSquigglyPath(x0, x1, lineY, 5.5, 2.0));
-          wavePath.setAttribute("class", "annotation-squiggly-path");
+          wavePath.setAttribute("class", `annotation-squiggly-path finding-marker ${isFocused ? "focused" : ""}`);
           wavePath.setAttribute("stroke", "#dc2626");
           wavePath.setAttribute("stroke-width", isFocused ? "2.6" : "1.8");
+          wavePath.style.cursor = "pointer";
+          wavePath.style.pointerEvents = "all";
+          wavePath.onclick = (e) => {
+            e.stopPropagation();
+            this.selectFinding(f);
+          };
           group.appendChild(wavePath);
         } else if (isGrammar) {
           const wavePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
           wavePath.setAttribute("d", this.generateSquigglyPath(x0, x1, lineY, 5.5, 2.0));
-          wavePath.setAttribute("class", "annotation-squiggly-path");
+          wavePath.setAttribute("class", `annotation-squiggly-path finding-marker ${isFocused ? "focused" : ""}`);
           wavePath.setAttribute("stroke", "#2563eb");
           wavePath.setAttribute("stroke-width", isFocused ? "2.6" : "1.8");
+          wavePath.style.cursor = "pointer";
+          wavePath.style.pointerEvents = "all";
+          wavePath.onclick = (e) => {
+            e.stopPropagation();
+            this.selectFinding(f);
+          };
           group.appendChild(wavePath);
         } else if (isDuplicate) {
           const l1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -912,9 +1098,15 @@ class DocumentViewerComponent {
           l1.setAttribute("y1", lineY - 1.5);
           l1.setAttribute("x2", x1);
           l1.setAttribute("y2", lineY - 1.5);
-          l1.setAttribute("class", "annotation-double-line");
+          l1.setAttribute("class", `annotation-double-line finding-marker ${isFocused ? "focused" : ""}`);
           l1.setAttribute("stroke", "#f59e0b");
           l1.setAttribute("stroke-width", isFocused ? "1.8" : "1.4");
+          l1.style.cursor = "pointer";
+          l1.style.pointerEvents = "all";
+          l1.onclick = (e) => {
+            e.stopPropagation();
+            this.selectFinding(f);
+          };
           group.appendChild(l1);
 
           const l2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -922,9 +1114,15 @@ class DocumentViewerComponent {
           l2.setAttribute("y1", lineY + 1.5);
           l2.setAttribute("x2", x1);
           l2.setAttribute("y2", lineY + 1.5);
-          l2.setAttribute("class", "annotation-double-line");
+          l2.setAttribute("class", `annotation-double-line finding-marker ${isFocused ? "focused" : ""}`);
           l2.setAttribute("stroke", "#f59e0b");
           l2.setAttribute("stroke-width", isFocused ? "1.8" : "1.4");
+          l2.style.cursor = "pointer";
+          l2.style.pointerEvents = "all";
+          l2.onclick = (e) => {
+            e.stopPropagation();
+            this.selectFinding(f);
+          };
           group.appendChild(l2);
         } else if (isTocDrift || isBrokenRef) {
           const dotLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -932,10 +1130,16 @@ class DocumentViewerComponent {
           dotLine.setAttribute("y1", lineY);
           dotLine.setAttribute("x2", x1);
           dotLine.setAttribute("y2", lineY);
-          dotLine.setAttribute("class", "annotation-dotted-line");
+          dotLine.setAttribute("class", `annotation-dotted-line finding-marker ${isFocused ? "focused" : ""}`);
           dotLine.setAttribute("stroke", "#ea580c");
           dotLine.setAttribute("stroke-width", isFocused ? "2.5" : "1.8");
           dotLine.setAttribute("stroke-dasharray", "3.5, 2.5");
+          dotLine.style.cursor = "pointer";
+          dotLine.style.pointerEvents = "all";
+          dotLine.onclick = (e) => {
+            e.stopPropagation();
+            this.selectFinding(f);
+          };
           group.appendChild(dotLine);
         } else {
           const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
@@ -943,8 +1147,15 @@ class DocumentViewerComponent {
           line.setAttribute("y1", lineY);
           line.setAttribute("x2", x1);
           line.setAttribute("y2", lineY);
+          line.setAttribute("class", `finding-marker ${isFocused ? "focused" : ""}`);
           line.setAttribute("stroke", sevColor.stroke);
           line.setAttribute("stroke-width", isFocused ? "2.4" : "1.6");
+          line.style.cursor = "pointer";
+          line.style.pointerEvents = "all";
+          line.onclick = (e) => {
+            e.stopPropagation();
+            this.selectFinding(f);
+          };
           group.appendChild(line);
         }
       });
@@ -972,6 +1183,13 @@ class DocumentViewerComponent {
         ptr.setAttribute("stroke", sevColor.stroke);
         ptr.setAttribute("stroke-width", isFocused ? "2.2" : "1.4");
         ptr.setAttribute("fill", "none");
+        ptr.setAttribute("class", "finding-marker");
+        ptr.style.cursor = "pointer";
+        ptr.style.pointerEvents = "all";
+        ptr.onclick = (e) => {
+          e.stopPropagation();
+          this.selectFinding(f);
+        };
         group.appendChild(ptr);
 
         const badgeRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -983,6 +1201,13 @@ class DocumentViewerComponent {
         badgeRect.setAttribute("fill", isFocused ? sevColor.stroke : "rgba(15, 23, 42, 0.88)");
         badgeRect.setAttribute("stroke", isFocused ? "#ffffff" : sevColor.stroke);
         badgeRect.setAttribute("stroke-width", isFocused ? "1.5" : "1");
+        badgeRect.setAttribute("class", "finding-marker");
+        badgeRect.style.cursor = "pointer";
+        badgeRect.style.pointerEvents = "all";
+        badgeRect.onclick = (e) => {
+          e.stopPropagation();
+          this.selectFinding(f);
+        };
         if (isFocused) {
           badgeRect.setAttribute("filter", `url(#defect-glow-${pageNum})`);
         }
@@ -996,7 +1221,14 @@ class DocumentViewerComponent {
         badgeText.setAttribute("font-weight", "800");
         badgeText.setAttribute("font-family", "monospace, sans-serif");
         badgeText.setAttribute("fill", "#ffffff");
+        badgeText.setAttribute("class", "finding-marker");
+        badgeText.style.cursor = "pointer";
+        badgeText.style.pointerEvents = "all";
         badgeText.textContent = isFocused ? `[${findingNum}] ▼ DEFECT` : `[${findingNum}]`;
+        badgeText.onclick = (e) => {
+          e.stopPropagation();
+          this.selectFinding(f);
+        };
         group.appendChild(badgeText);
 
         if (isFocused) {
@@ -1028,15 +1260,21 @@ class DocumentViewerComponent {
       const isFocused = this.focusedFinding && this.focusedFinding.finding_id === mf.finding_id;
       const fIdx = this.findings.findIndex((x) => x.finding_id === mf.finding_id);
       const findingNum = fIdx >= 0 ? (fIdx + 1).toString().padStart(2, "0") : "01";
-      const bannerW = Math.min(500, renderedWidth - 36);
-      const bannerH = 44;
+      const bannerW = Math.min(520, renderedWidth - 36);
+      const bannerH = 42;
       const bannerX = (renderedWidth - bannerW) / 2;
-      const bannerY = 20 + mIdx * (bannerH + 10);
+      // Position banners sequentially at the bottom margin so they never obscure the document text or headers
+      const bannerY = Math.max(20, renderedHeight - ((missingFindingsOnPage.length - mIdx) * (bannerH + 8)) - 16);
 
       const mg = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      mg.setAttribute("class", `missing-content-group ${isFocused ? "focused defect-pulsing" : ""}`);
+      mg.setAttribute("class", `missing-content-group finding-marker ${isFocused ? "focused defect-pulsing" : ""}`);
       mg.setAttribute("data-finding-id", mf.finding_id);
       mg.style.cursor = "pointer";
+      mg.style.pointerEvents = "all";
+      mg.onclick = (e) => {
+        e.stopPropagation();
+        this.selectFinding(mf);
+      };
 
       const mRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       mRect.setAttribute("x", bannerX);
@@ -1048,6 +1286,13 @@ class DocumentViewerComponent {
       mRect.setAttribute("stroke", isFocused ? "#dc2626" : "#ea580c");
       mRect.setAttribute("stroke-width", isFocused ? "2" : "1.5");
       mRect.setAttribute("stroke-dasharray", "6,3");
+      mRect.setAttribute("class", "finding-bbox finding-marker");
+      mRect.style.cursor = "pointer";
+      mRect.style.pointerEvents = "all";
+      mRect.onclick = (e) => {
+        e.stopPropagation();
+        this.selectFinding(mf);
+      };
       mg.appendChild(mRect);
 
       const bRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -1059,6 +1304,13 @@ class DocumentViewerComponent {
       bRect.setAttribute("fill", isFocused ? "#dc2626" : "rgba(15, 23, 42, 0.88)");
       bRect.setAttribute("stroke", isFocused ? "#ffffff" : "#dc2626");
       bRect.setAttribute("stroke-width", "1.2");
+      bRect.setAttribute("class", "finding-marker");
+      bRect.style.cursor = "pointer";
+      bRect.style.pointerEvents = "all";
+      bRect.onclick = (e) => {
+        e.stopPropagation();
+        this.selectFinding(mf);
+      };
       mg.appendChild(bRect);
 
       const bText = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -1069,7 +1321,14 @@ class DocumentViewerComponent {
       bText.setAttribute("font-weight", "800");
       bText.setAttribute("font-family", "monospace, sans-serif");
       bText.setAttribute("fill", "#ffffff");
+      bText.setAttribute("class", "finding-marker");
+      bText.style.cursor = "pointer";
+      bText.style.pointerEvents = "all";
       bText.textContent = isFocused ? `[${findingNum}] MISSING` : `[${findingNum}]`;
+      bText.onclick = (e) => {
+        e.stopPropagation();
+        this.selectFinding(mf);
+      };
       mg.appendChild(bText);
 
       const t1 = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -1078,7 +1337,14 @@ class DocumentViewerComponent {
       t1.setAttribute("font-size", "11px");
       t1.setAttribute("font-weight", "800");
       t1.setAttribute("fill", isFocused ? "#dc2626" : "#ea580c");
+      t1.setAttribute("class", "finding-marker");
+      t1.style.cursor = "pointer";
+      t1.style.pointerEvents = "all";
       t1.textContent = "⚠ EXPECTED CONTENT NOT DETECTED HERE";
+      t1.onclick = (e) => {
+        e.stopPropagation();
+        this.selectFinding(mf);
+      };
       mg.appendChild(t1);
 
       const t2 = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -1087,8 +1353,15 @@ class DocumentViewerComponent {
       t2.setAttribute("font-size", "11px");
       t2.setAttribute("font-weight", "600");
       t2.setAttribute("fill", "#0f172a");
+      t2.setAttribute("class", "finding-marker");
+      t2.style.cursor = "pointer";
+      t2.style.pointerEvents = "all";
       const missingLabel = mf.expected_value || mf.expected_text || mf.explanation || mf.finding_id;
       t2.textContent = missingLabel.length > 55 ? missingLabel.substring(0, 52) + "..." : missingLabel;
+      t2.onclick = (e) => {
+        e.stopPropagation();
+        this.selectFinding(mf);
+      };
       mg.appendChild(t2);
 
       mg.onclick = (e) => {
@@ -1101,37 +1374,86 @@ class DocumentViewerComponent {
   }
 
   selectFinding(finding) {
-    this.focusedFinding = finding;
+    if (!finding) return;
+    const norm = this.normalizeFinding(finding);
+    this.focusedFinding = norm;
+
+    // Navigate to finding's page if on a different page
+    const fPage = norm.page_number;
+    if (fPage && fPage !== this.currentPage && fPage >= 1 && fPage <= this.totalPages) {
+      this.currentPage = fPage;
+      this.scrollToPage(fPage, true);
+    }
+
     this.updatePageSizes();
+    this.renderSidebarContent();
 
     if (this.options.showDrawer) {
-      this.showFindingInDrawer(finding);
+      this.showFindingInDrawer(norm);
     }
     this.updateToolbar();
 
     if (this.onFindingSelected) {
-      this.onFindingSelected(finding);
+      this.onFindingSelected(norm);
     }
+  }
+
+  nextFinding() {
+    const list = this.getFilteredFindings();
+    if (!list || list.length === 0) return;
+    if (!this.focusedFinding) {
+      this.selectFinding(list[0]);
+      this.focusFinding(list[0]);
+      return;
+    }
+    const idx = list.findIndex((f) => f.finding_id === this.focusedFinding.finding_id);
+    const nextIdx = idx >= 0 ? (idx + 1) % list.length : 0;
+    this.selectFinding(list[nextIdx]);
+    this.focusFinding(list[nextIdx]);
+  }
+
+  prevFinding() {
+    const list = this.getFilteredFindings();
+    if (!list || list.length === 0) return;
+    if (!this.focusedFinding) {
+      this.selectFinding(list[list.length - 1]);
+      this.focusFinding(list[list.length - 1]);
+      return;
+    }
+    const idx = list.findIndex((f) => f.finding_id === this.focusedFinding.finding_id);
+    const prevIdx = idx >= 0 ? (idx - 1 + list.length) % list.length : list.length - 1;
+    this.selectFinding(list[prevIdx]);
+    this.focusFinding(list[prevIdx]);
   }
 
   showFindingInDrawer(f) {
     const drawerContent = this.container.querySelector("#viewer-drawer-content");
     if (!drawerContent) return;
 
-    const normSev = (f.severity || "LOW").toUpperCase();
-    const sevClass = (normSev === "INFORMATIONAL" || normSev === "INFO") ? "badge-info" : `badge-${normSev.toLowerCase()}`;
-    const precision = f.location_precision || "APPROXIMATE";
-    const isExact = precision.startsWith("EXACT");
+    if (!f) {
+      drawerContent.innerHTML = `
+        <div class="empty-state" style="padding: 24px;">
+          <div class="empty-state-icon">🔍</div>
+          <div class="empty-state-title">No Finding Selected</div>
+          <div class="empty-state-desc">Click any marked defect or underline on the document canvas to inspect exact issue details.</div>
+        </div>
+      `;
+      return;
+    }
+
+    const norm = this.normalizeFinding(f);
+    const sevClass = (norm.severity === "INFO") ? "badge-info" : `badge-${norm.severity.toLowerCase()}`;
+    const isExact = norm.location_precision === "EXACT";
 
     let relatedHtml = "";
-    if (f.related_finding_ids && f.related_finding_ids.length > 0) {
-      const linkBtns = f.related_finding_ids.map((relId) => {
-        const relFinding = this.findings.find((x) => x.finding_id === relId);
+    if (Array.isArray(norm.related_finding_ids) && norm.related_finding_ids.length > 0) {
+      const linkBtns = norm.related_finding_ids.map((relId) => {
+        const relFinding = this.findings.find((x) => x.finding_id === relId || x.id === relId || x.defect_id === relId);
         const relPage = relFinding ? (relFinding.page_number || relFinding.page) : "";
         const pageLabel = relPage ? `(Page ${relPage})` : "";
         return `
-          <button class="finding-link-btn" onclick="window.currentViewer && window.currentViewer.focusFindingById('${relId}')">
-            🔗 Jump to Conflicting Occurrence ${relId} ${pageLabel} →
+          <button class="finding-link-btn" onclick="window.currentViewer && window.currentViewer.focusFindingById('${escapeHtml(relId)}')">
+            🔗 Jump to Conflicting Occurrence ${escapeHtml(relId)} ${pageLabel} →
           </button>
         `;
       }).join("");
@@ -1148,66 +1470,66 @@ class DocumentViewerComponent {
 
     drawerContent.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: space-between;">
-        <span style="font-size: 14px; font-weight: 800; color: var(--text-primary);">${f.finding_id}</span>
+        <span style="font-size: 14px; font-weight: 800; color: var(--text-primary);">${escapeHtml(norm.finding_id)}</span>
         <div style="display: flex; gap: 6px; align-items: center;">
           <span class="badge ${isExact ? 'badge-success' : 'badge-outline'}" style="font-size: 10px;">
-            ${escapeHtml(precision)}
+            ${escapeHtml(norm.location_precision)}
           </span>
-          <span class="badge ${sevClass}">${f.severity}</span>
+          <span class="badge ${sevClass}">${escapeHtml(norm.severity)}</span>
         </div>
       </div>
 
       <div class="finding-prop-group">
         <span class="finding-prop-label">Category & Issue Type</span>
         <span class="finding-prop-value" style="font-weight: 700; color: var(--text-primary);">
-          ${escapeHtml(f.category)} ${f.issue_type ? `• <span style="font-size: 11px; color: var(--accent-primary);">${escapeHtml(f.issue_type)}</span>` : ''}
+          ${escapeHtml(norm.category)}${norm.issue_type ? ` • <span style="font-size: 11px; color: var(--accent-primary);">${escapeHtml(norm.issue_type)}</span>` : ''}
         </span>
       </div>
 
       <div class="finding-prop-group">
         <span class="finding-prop-label">Location / Section</span>
-        <span class="finding-prop-value">Page ${f.page_number || f.page} • ${escapeHtml(f.location || "General Text")}</span>
+        <span class="finding-prop-value">${escapeHtml(norm.location)}</span>
       </div>
 
       <div class="finding-prop-group">
         <span class="finding-prop-label">Exact Affected Text</span>
         <div class="finding-prop-code" style="border-left: 3px solid var(--sev-high); background: rgba(234, 88, 12, 0.08);">
-          ${escapeHtml(String(f.matched_text || f.detected_value || f.original_content || "N/A"))}
+          ${escapeHtml(norm.matched_text)}
         </div>
       </div>
 
       <div class="finding-prop-group">
         <span class="finding-prop-label">Expected Correction / Spec</span>
         <div class="finding-prop-code" style="border-left: 3px solid #10b981; color: #10b981; background: rgba(16, 185, 129, 0.08);">
-          ${escapeHtml(String(f.suggested_fix || f.expected_text || f.expected_value || "In accordance with standard"))}
+          ${escapeHtml(norm.expected_text)}
         </div>
       </div>
 
       ${relatedHtml}
 
-      ${f.deviation ? `
+      ${norm.deviation ? `
         <div class="finding-prop-group">
           <span class="finding-prop-label">Deviation Magnitude</span>
-          <span class="finding-prop-value" style="color: var(--sev-high); font-weight: 700;">${escapeHtml(f.deviation)}</span>
+          <span class="finding-prop-value" style="color: var(--sev-high); font-weight: 700;">${escapeHtml(norm.deviation)}</span>
         </div>
       ` : ""}
 
       <div class="finding-prop-group">
         <span class="finding-prop-label">Technical Explanation</span>
-        <p class="finding-prop-value" style="font-size: 12px; line-height: 1.45;">${escapeHtml(f.explanation || "No explanation provided.")}</p>
+        <p class="finding-prop-value" style="font-size: 12px; line-height: 1.45;">${escapeHtml(norm.explanation)}</p>
       </div>
 
       <div class="finding-prop-group">
         <span class="finding-prop-label">Suggested Action (Information Only)</span>
         <p class="finding-prop-value" style="color: var(--accent-primary); font-weight: 600; font-size: 12px; line-height: 1.45;">
-          💡 ${escapeHtml(f.suggested_fix || f.suggested_correction || "Verify and correct manually in the source document.")}
+          💡 ${escapeHtml(norm.remediation)}
         </p>
       </div>
 
       <div class="finding-prop-group">
         <span class="finding-prop-label">Engineering Standard Reference</span>
         <span class="finding-prop-value" style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
-          ${escapeHtml(f.rule_reference || "SpecGuard Compliance Standards")}
+          ${escapeHtml(norm.rule_reference)}
         </span>
       </div>
 
@@ -1217,7 +1539,10 @@ class DocumentViewerComponent {
     `;
 
     const drawer = this.container.querySelector("#viewer-detail-drawer");
-    if (drawer) drawer.classList.remove("hidden");
+    if (drawer) {
+      drawer.classList.remove("hidden");
+      drawer.style.display = "";
+    }
   }
 
   closeDrawer() {

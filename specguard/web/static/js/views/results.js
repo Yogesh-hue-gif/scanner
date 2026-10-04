@@ -136,13 +136,13 @@ window.ResultsView = {
 
             <!-- Primary Navigation Actions -->
             <div style="display: flex; gap: 8px;">
-              <button class="btn btn-primary" onclick="window.router.navigate('viewer')">
+              <button class="btn btn-primary" onclick="window.router.navigate('viewer', { session_id: '${sessionId || ''}' })">
                 👁️ Open Document Inspection Canvas
               </button>
-              <button class="btn btn-secondary" onclick="window.router.navigate('findings')">
+              <button class="btn btn-secondary" onclick="window.router.navigate('findings', { session_id: '${sessionId || ''}' })">
                 📋 View Document Findings
               </button>
-              <button class="btn btn-outline" onclick="window.router.navigate('reports')">
+              <button class="btn btn-outline" onclick="window.router.navigate('reports', { session_id: '${sessionId || ''}' })">
                 📄 Export Report
               </button>
             </div>

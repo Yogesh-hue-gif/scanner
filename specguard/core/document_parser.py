@@ -8,7 +8,7 @@ import os
 import re
 import hashlib
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 import logging
 
 import pymupdf  # PyMuPDF
@@ -102,264 +102,32 @@ class DocumentParser:
             tables: List[TableData] = []
             figures: List[FigureData] = []
 
-            # Extract detailed text blocks with font and coordinate data
-            page_dict = fitz_page.get_text("dict")
+            # Check if page contains extractable native vector text
+            native_text_stream = fitz_page.get_text()
+            has_native_text = len(native_text_stream.strip()) > 0
 
-            # Extract exact word coordinates from PyMuPDF
-            words_by_line: Dict[Tuple[int, int], List[Tuple[float, float, float, float, str]]] = {}
-            try:
-                for w_item in fitz_page.get_text("words"):
-                    # w_item: (x0, y0, x1, y1, word_text, block_no, line_no, word_no)
-                    k = (int(w_item[5]), int(w_item[6]))
-                    if k not in words_by_line:
-                        words_by_line[k] = []
-                    words_by_line[k].append((float(w_item[0]), float(w_item[1]), float(w_item[2]), float(w_item[3]), str(w_item[4])))
-            except Exception as w_err:
-                logger.debug("Native word extraction error on page %d: %s", page_num, w_err)
-                words_by_line = {}
-
-            block_id = 0
-            for b_idx, b in enumerate(page_dict.get("blocks", [])):
-                if b.get("type") == 0:  # Text block
-                    block_words: List[WordModel] = []
-                    block_lines: List[LineModel] = []
-
-                    for l_idx, line in enumerate(b.get("lines", [])):
-                        line_text_parts = []
-                        line_bbox = line.get("bbox", (0, 0, 0, 0))
-                        font_name = "Helvetica"
-                        font_size = 11.0
-                        line_words: List[WordModel] = []
-
-                        # Gather span styles for this line
-                        spans = line.get("spans", [])
-                        span_info = []
-                        for span in spans:
-                            span_text = span.get("text", "")
-                            line_text_parts.append(span_text)
-                            s_font = span.get("font", font_name)
-                            s_size = float(span.get("size", font_size))
-                            flags = span.get("flags", 0)
-                            s_italic = bool(flags & 2)
-                            s_bold = bool(flags & 16 or "bold" in s_font.lower())
-                            s_bbox = span.get("bbox", (0, 0, 0, 0))
-                            span_info.append({
-                                "text": span_text,
-                                "font": s_font,
-                                "size": s_size,
-                                "bold": s_bold,
-                                "italic": s_italic,
-                                "bbox": s_bbox
-                            })
-                            font_name = s_font
-                            font_size = s_size
-
-                        # Get exact words for this block and line if available
-                        exact_words = words_by_line.get((b_idx, l_idx), [])
-                        if exact_words:
-                            for wx0, wy0, wx1, wy1, wtext in exact_words:
-                                # Determine matching span for font attributes
-                                matched_span = None
-                                w_mid_x = (wx0 + wx1) / 2.0
-                                for si in span_info:
-                                    sb = si["bbox"]
-                                    if sb[0] - 2.0 <= w_mid_x <= sb[2] + 2.0:
-                                        matched_span = si
-                                        break
-                                if not matched_span and span_info:
-                                    matched_span = span_info[0]
-
-                                w_model = WordModel(
-                                    text=wtext,
-                                    bbox=BBox(x0=wx0, y0=wy0, x1=wx1, y1=wy1),
-                                    font_name=matched_span["font"] if matched_span else font_name,
-                                    font_size=round(matched_span["size"] if matched_span else font_size, 1),
-                                    is_bold=matched_span["bold"] if matched_span else False,
-                                    is_italic=matched_span["italic"] if matched_span else False
-                                )
-                                line_words.append(w_model)
-                                block_words.append(w_model)
-                        else:
-                            # Fallback: Proportional character slicing inside each span
-                            for si in span_info:
-                                span_text = si["text"]
-                                sb = si["bbox"]
-                                s_w = sb[2] - sb[0]
-                                s_len = max(1, len(span_text))
-                                char_w = s_w / s_len
-                                c_offset = 0
-                                for word_str in span_text.split():
-                                    if not word_str.strip():
-                                        continue
-                                    idx_in_span = span_text.find(word_str, c_offset)
-                                    if idx_in_span == -1:
-                                        idx_in_span = c_offset
-                                    w_x0 = sb[0] + idx_in_span * char_w
-                                    w_x1 = w_x0 + len(word_str) * char_w
-                                    c_offset = idx_in_span + len(word_str)
-
-                                    w_model = WordModel(
-                                        text=word_str,
-                                        bbox=BBox(x0=w_x0, y0=sb[1], x1=w_x1, y1=sb[3]),
-                                        font_name=si["font"],
-                                        font_size=round(si["size"], 1),
-                                        is_bold=si["bold"],
-                                        is_italic=si["italic"]
-                                    )
-                                    line_words.append(w_model)
-                                    block_words.append(w_model)
-
-                        full_line_text = "".join(line_text_parts).strip()
-                        if full_line_text:
-                            block_lines.append(LineModel(
-                                words=line_words,
-                                text=full_line_text,
-                                bbox=BBox(x0=line_bbox[0], y0=line_bbox[1], x1=line_bbox[2], y1=line_bbox[3]),
-                                font_size=round(font_size, 1)
-                            ))
-
-                    if block_lines:
-                        # Compute overall block bbox from lines
-                        bx0 = min(l.bbox.x0 for l in block_lines if l.bbox)
-                        by0 = min(l.bbox.y0 for l in block_lines if l.bbox)
-                        bx1 = max(l.bbox.x1 for l in block_lines if l.bbox)
-                        by1 = max(l.bbox.y1 for l in block_lines if l.bbox)
-                        b_text = "\n".join(l.text for l in block_lines)
-
-                        raw_blocks.append(TextBlock(
-                            text=b_text,
-                            bbox=BBox(x0=bx0, y0=by0, x1=bx1, y1=by1),
-                            font_name=block_lines[0].words[0].font_name if block_words else "Helvetica",
-                            font_size=block_lines[0].font_size,
-                            is_bold=block_words[0].is_bold if block_words else False,
-                            is_italic=block_words[0].is_italic if block_words else False,
-                            block_id=block_id,
-                            words=block_words,
-                            lines=block_lines
-                        ))
-                        block_id += 1
-
-                elif b.get("type") == 1:  # Image block directly from PDF dictionary
-                    img_bbox = b.get("bbox", (0, 0, 0, 0))
-                    figures.append(FigureData(
-                        bbox=BBox(x0=img_bbox[0], y0=img_bbox[1], x1=img_bbox[2], y1=img_bbox[3]),
-                        page_num=page_num,
-                        figure_type="raster",
-                        figure_id=f"fig_p{page_num}_{len(figures) + 1}",
-                        confidence=0.95
-                    ))
-
-            # Extract native PDF tables if available via pymupdf
-            try:
-                tabs = fitz_page.find_tables()
-                for t_idx, tab in enumerate(tabs):
-                    tab_df = tab.extract()
-                    if tab_df and len(tab_df) > 0:
-                        headers = [str(c or "").strip() for c in tab_df[0]]
-                        rows = [[str(c or "").strip() for c in row] for row in tab_df[1:]]
-                        tab_rect = tab.bbox
-                        tables.append(TableData(
-                            rows=rows,
-                            headers=headers,
-                            bbox=BBox(x0=tab_rect[0], y0=tab_rect[1], x1=tab_rect[2], y1=tab_rect[3]),
-                            page_num=page_num,
-                            table_id=f"tbl_p{page_num}_{t_idx + 1}"
-                        ))
-            except Exception as e:
-                logger.debug("Native PDF table extraction fallback for page %d: %s", page_num, e)
-
-            # Native vector drawings detection (diagrams, flowcharts, charts)
-            try:
-                drawings = fitz_page.get_drawings()
-                if drawings:
-                    # Filter out header rules, footer lines, and full-page border boxes
-                    valid_rects = []
-                    for d in drawings:
-                        r = d.get("rect")
-                        if not r:
-                            continue
-                        rx0, ry0, rx1, ry1 = float(r[0]), float(r[1]), float(r[2]), float(r[3])
-                        rw, rh = rx1 - rx0, ry1 - ry0
-                        # Ignore header/footer lines and page boundary borders
-                        if ry1 <= page_h * 0.07 or ry0 >= page_h * 0.93:
-                            continue
-                        if rw >= page_w * 0.85 and rh >= page_h * 0.85:
-                            continue
-                        valid_rects.append((rx0, ry0, rx1, ry1))
-
-                    if valid_rects:
-                        # Cluster rects by proximity
-                        clusters: List[List[Tuple[float, float, float, float]]] = []
-                        for rect_item in valid_rects:
-                            assigned = False
-                            for clus in clusters:
-                                # Check overlap or close proximity (< 25pt)
-                                clus_x0 = min(c[0] for c in clus)
-                                clus_y0 = min(c[1] for c in clus)
-                                clus_x1 = max(c[2] for c in clus)
-                                clus_y1 = max(c[3] for c in clus)
-                                if not (rect_item[2] < clus_x0 - 25 or rect_item[0] > clus_x1 + 25 or
-                                        rect_item[3] < clus_y0 - 25 or rect_item[1] > clus_y1 + 25):
-                                    clus.append(rect_item)
-                                    assigned = True
-                                    break
-                            if not assigned:
-                                clusters.append([rect_item])
-
-                        for clus in clusters:
-                            cx0 = min(c[0] for c in clus)
-                            cy0 = min(c[1] for c in clus)
-                            cx1 = max(c[2] for c in clus)
-                            cy1 = max(c[3] for c in clus)
-                            cdw = cx1 - cx0
-                            cdh = cy1 - cy0
-
-                            # Ignore if box spans > 70% of page width and > 70% of page height (not a single figure)
-                            if cdw >= page_w * 0.70 and cdh >= page_h * 0.70:
-                                continue
-
-                            # Only consider as figure if localized diagram
-                            if cdw > 50.0 and cdh > 35.0:
-                                is_table_border = any(
-                                    t.bbox and (cy0 >= t.bbox.y0 - 5.0 and cy1 <= t.bbox.y1 + 5.0)
-                                    for t in tables
-                                )
-                                if not is_table_border:
-                                    figures.append(FigureData(
-                                        bbox=BBox(x0=cx0, y0=cy0, x1=cx1, y1=cy1),
-                                        page_num=page_num,
-                                        figure_type="vector",
-                                        figure_id=f"fig_p{page_num}_{len(figures) + 1}",
-                                        confidence=0.90
-                                    ))
-            except Exception as d_err:
-                logger.debug("Vector drawings extraction error on page %d: %s", page_num, d_err)
-
-
-            # Optional Deep CV analysis: only if deep_analysis is explicitly requested
-            if deep_analysis:
+            if not has_native_text:
+                # Scanned or image-only page: trigger whole-page image OCR mode
+                raw_blocks, tables, figures, _ = ScannedDocumentPipeline.process_scanned_page(
+                    fitz_page, page_num
+                )
+            else:
+                # Extract detailed text blocks with font and coordinate data directly from vector stream
+                words_by_line: Dict[Tuple[int, int], List[Tuple[float, float, float, float, str]]] = {}
                 try:
-                    pix = fitz_page.get_pixmap(dpi=150)
-                    img_data = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
-                    if pix.n >= 3:
-                        gray = cv2.cvtColor(img_data, cv2.COLOR_BGR2GRAY if pix.n == 3 else cv2.COLOR_RGBA2GRAY)
-                        cv_tables_boxes, _ = LayoutAnalyzerCV.detect_lines_and_tables(gray, page_num)
-                        scale_x = page_w / pix.width
-                        scale_y = page_h / pix.height
-                        cv_figures = LayoutAnalyzerCV.detect_figures_and_drawings(gray, cv_tables_boxes, page_num)
-                        for fig in cv_figures:
-                            figures.append(FigureData(
-                                bbox=BBox(
-                                    x0=fig.bbox.x0 * scale_x, y0=fig.bbox.y0 * scale_y,
-                                    x1=fig.bbox.x1 * scale_x, y1=fig.bbox.y1 * scale_y
-                                ),
-                                page_num=page_num,
-                                figure_type=fig.figure_type,
-                                figure_id=f"fig_p{page_num}_{len(figures) + 1}"
-                            ))
-                    del pix
-                except Exception as cv_err:
-                    logger.debug("Deep CV layout analysis on page %d skipped: %s", page_num, cv_err)
+                    for w_item in fitz_page.get_text("words"):
+                        # w_item: (x0, y0, x1, y1, word_text, block_no, line_no, word_no)
+                        k = (int(w_item[5]), int(w_item[6]))
+                        if k not in words_by_line:
+                            words_by_line[k] = []
+                        words_by_line[k].append((float(w_item[0]), float(w_item[1]), float(w_item[2]), float(w_item[3]), str(w_item[4])))
+                except Exception as w_err:
+                    logger.debug("Native word extraction error on page %d: %s", page_num, w_err)
+                    words_by_line = {}
+
+                raw_blocks, tables, figures = DocumentParser._extract_native_page_data(
+                    fitz_page, page_num, page_w, page_h, words_by_line, deep_analysis
+                )
 
             # Reconstruct human reading order using geometric layout analysis
             ordered_blocks, reading_order, columns, layout_type = reading_engine.analyze_page_layout(
@@ -570,3 +338,248 @@ class DocumentParser:
             pages=[page],
             metadata={"parser": "OpenCV-Scanned", "deskew_angle": angle}
         )
+
+    @staticmethod
+    def _extract_native_page_data(
+        fitz_page,
+        page_num: int,
+        page_w: float,
+        page_h: float,
+        words_by_line: Dict[Tuple[int, int], List[Tuple[float, float, float, float, str]]],
+        deep_analysis: bool = False
+    ) -> Tuple[List[TextBlock], List[TableData], List[FigureData]]:
+        raw_blocks: List[TextBlock] = []
+        tables: List[TableData] = []
+        figures: List[FigureData] = []
+
+        page_dict = fitz_page.get_text("dict")
+        block_id = 0
+        for b_idx, b in enumerate(page_dict.get("blocks", [])):
+            if b.get("type") == 0:  # Text block
+                block_words: List[WordModel] = []
+                block_lines: List[LineModel] = []
+
+                for l_idx, line in enumerate(b.get("lines", [])):
+                    line_text_parts = []
+                    line_bbox = line.get("bbox", (0, 0, 0, 0))
+                    font_name = "Helvetica"
+                    font_size = 11.0
+                    line_words: List[WordModel] = []
+
+                    spans = line.get("spans", [])
+                    span_info = []
+                    for span in spans:
+                        span_text = span.get("text", "")
+                        line_text_parts.append(span_text)
+                        s_font = span.get("font", font_name)
+                        s_size = float(span.get("size", font_size))
+                        flags = span.get("flags", 0)
+                        s_italic = bool(flags & 2)
+                        s_bold = bool(flags & 16 or "bold" in s_font.lower())
+                        s_bbox = span.get("bbox", (0, 0, 0, 0))
+                        span_info.append({
+                            "text": span_text,
+                            "font": s_font,
+                            "size": s_size,
+                            "bold": s_bold,
+                            "italic": s_italic,
+                            "bbox": s_bbox
+                        })
+                        font_name = s_font
+                        font_size = s_size
+
+                    exact_words = words_by_line.get((b_idx, l_idx), [])
+                    if exact_words:
+                        for wx0, wy0, wx1, wy1, wtext in exact_words:
+                            matched_span = None
+                            w_mid_x = (wx0 + wx1) / 2.0
+                            for si in span_info:
+                                sb = si["bbox"]
+                                if sb[0] - 2.0 <= w_mid_x <= sb[2] + 2.0:
+                                    matched_span = si
+                                    break
+                            if not matched_span and span_info:
+                                matched_span = span_info[0]
+
+                            w_model = WordModel(
+                                text=wtext,
+                                bbox=BBox(x0=wx0, y0=wy0, x1=wx1, y1=wy1),
+                                font_name=matched_span["font"] if matched_span else font_name,
+                                font_size=round(matched_span["size"] if matched_span else font_size, 1),
+                                is_bold=matched_span["bold"] if matched_span else False,
+                                is_italic=matched_span["italic"] if matched_span else False
+                            )
+                            line_words.append(w_model)
+                            block_words.append(w_model)
+                    else:
+                        for si in span_info:
+                            span_text = si["text"]
+                            sb = si["bbox"]
+                            s_w = sb[2] - sb[0]
+                            s_len = max(1, len(span_text))
+                            char_w = s_w / s_len
+                            c_offset = 0
+                            for word_str in span_text.split():
+                                if not word_str.strip():
+                                    continue
+                                idx_in_span = span_text.find(word_str, c_offset)
+                                if idx_in_span == -1:
+                                    idx_in_span = c_offset
+                                w_x0 = sb[0] + idx_in_span * char_w
+                                w_x1 = w_x0 + len(word_str) * char_w
+                                c_offset = idx_in_span + len(word_str)
+
+                                w_model = WordModel(
+                                    text=word_str,
+                                    bbox=BBox(x0=w_x0, y0=sb[1], x1=w_x1, y1=sb[3]),
+                                    font_name=si["font"],
+                                    font_size=round(si["size"], 1),
+                                    is_bold=si["bold"],
+                                    is_italic=si["italic"]
+                                )
+                                line_words.append(w_model)
+                                block_words.append(w_model)
+
+                    full_line_text = "".join(line_text_parts).strip()
+                    if full_line_text:
+                        block_lines.append(LineModel(
+                            words=line_words,
+                            text=full_line_text,
+                            bbox=BBox(x0=line_bbox[0], y0=line_bbox[1], x1=line_bbox[2], y1=line_bbox[3]),
+                            font_size=round(font_size, 1)
+                        ))
+
+                if block_lines:
+                    bx0 = min(l.bbox.x0 for l in block_lines if l.bbox)
+                    by0 = min(l.bbox.y0 for l in block_lines if l.bbox)
+                    bx1 = max(l.bbox.x1 for l in block_lines if l.bbox)
+                    by1 = max(l.bbox.y1 for l in block_lines if l.bbox)
+                    b_text = "\n".join(l.text for l in block_lines)
+
+                    raw_blocks.append(TextBlock(
+                        text=b_text,
+                        bbox=BBox(x0=bx0, y0=by0, x1=bx1, y1=by1),
+                        font_name=block_lines[0].words[0].font_name if block_words else "Helvetica",
+                        font_size=block_lines[0].font_size,
+                        is_bold=block_words[0].is_bold if block_words else False,
+                        is_italic=block_words[0].is_italic if block_words else False,
+                        block_id=block_id,
+                        words=block_words,
+                        lines=block_lines
+                    ))
+                    block_id += 1
+
+            elif b.get("type") == 1:  # Image block directly from PDF dictionary
+                img_bbox = b.get("bbox", (0, 0, 0, 0))
+                figures.append(FigureData(
+                    bbox=BBox(x0=img_bbox[0], y0=img_bbox[1], x1=img_bbox[2], y1=img_bbox[3]),
+                    page_num=page_num,
+                    figure_type="raster",
+                    figure_id=f"fig_p{page_num}_{len(figures) + 1}",
+                    confidence=0.95
+                ))
+
+        # Extract native PDF tables
+        try:
+            tabs = fitz_page.find_tables()
+            for t_idx, tab in enumerate(tabs):
+                tab_df = tab.extract()
+                if tab_df and len(tab_df) > 0:
+                    headers = [str(c or "").strip() for c in tab_df[0]]
+                    rows = [[str(c or "").strip() for c in row] for row in tab_df[1:]]
+                    tab_rect = tab.bbox
+                    tables.append(TableData(
+                        rows=rows,
+                        headers=headers,
+                        bbox=BBox(x0=tab_rect[0], y0=tab_rect[1], x1=tab_rect[2], y1=tab_rect[3]),
+                        page_num=page_num,
+                        table_id=f"tbl_p{page_num}_{t_idx + 1}"
+                    ))
+        except Exception as e:
+            logger.debug("Native PDF table extraction fallback for page %d: %s", page_num, e)
+
+        # Native vector drawings detection
+        try:
+            drawings = fitz_page.get_drawings()
+            if drawings:
+                valid_rects = []
+                for d in drawings:
+                    r = d.get("rect")
+                    if not r:
+                        continue
+                    rx0, ry0, rx1, ry1 = float(r[0]), float(r[1]), float(r[2]), float(r[3])
+                    rw, rh = rx1 - rx0, ry1 - ry0
+                    if ry1 <= page_h * 0.07 or ry0 >= page_h * 0.93:
+                        continue
+                    if rw >= page_w * 0.85 and rh >= page_h * 0.85:
+                        continue
+                    valid_rects.append((rx0, ry0, rx1, ry1))
+
+                if valid_rects:
+                    clusters: List[List[Tuple[float, float, float, float]]] = []
+                    for rect_item in valid_rects:
+                        assigned = False
+                        for clus in clusters:
+                            clus_x0 = min(c[0] for c in clus)
+                            clus_y0 = min(c[1] for c in clus)
+                            clus_x1 = max(c[2] for c in clus)
+                            clus_y1 = max(c[3] for c in clus)
+                            if not (rect_item[2] < clus_x0 - 25 or rect_item[0] > clus_x1 + 25 or
+                                    rect_item[3] < clus_y0 - 25 or rect_item[1] > clus_y1 + 25):
+                                clus.append(rect_item)
+                                assigned = True
+                                break
+                        if not assigned:
+                            clusters.append([rect_item])
+
+                    for clus in clusters:
+                        cx0 = min(c[0] for c in clus)
+                        cy0 = min(c[1] for c in clus)
+                        cx1 = max(c[2] for c in clus)
+                        cy1 = max(c[3] for c in clus)
+                        cdw = cx1 - cx0
+                        cdh = cy1 - cy0
+                        if cdw >= page_w * 0.70 and cdh >= page_h * 0.70:
+                            continue
+                        if cdw > 50.0 and cdh > 35.0:
+                            is_table_border = any(
+                                t.bbox and (cy0 >= t.bbox.y0 - 5.0 and cy1 <= t.bbox.y1 + 5.0)
+                                for t in tables
+                            )
+                            if not is_table_border:
+                                figures.append(FigureData(
+                                    bbox=BBox(x0=cx0, y0=cy0, x1=cx1, y1=cy1),
+                                    page_num=page_num,
+                                    figure_type="vector",
+                                    figure_id=f"fig_p{page_num}_{len(figures) + 1}",
+                                    confidence=0.90
+                                ))
+        except Exception as d_err:
+            logger.debug("Vector drawings extraction error on page %d: %s", page_num, d_err)
+
+        if deep_analysis:
+            try:
+                pix = fitz_page.get_pixmap(dpi=150)
+                img_data = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+                if pix.n >= 3:
+                    gray = cv2.cvtColor(img_data, cv2.COLOR_BGR2GRAY if pix.n == 3 else cv2.COLOR_RGBA2GRAY)
+                    cv_tables_boxes, _ = LayoutAnalyzerCV.detect_lines_and_tables(gray, page_num)
+                    scale_x = page_w / pix.width
+                    scale_y = page_h / pix.height
+                    cv_figures = LayoutAnalyzerCV.detect_figures_and_drawings(gray, cv_tables_boxes, page_num)
+                    for fig in cv_figures:
+                        figures.append(FigureData(
+                            bbox=BBox(
+                                x0=fig.bbox.x0 * scale_x, y0=fig.bbox.y0 * scale_y,
+                                x1=fig.bbox.x1 * scale_x, y1=fig.bbox.y1 * scale_y
+                            ),
+                            page_num=page_num,
+                            figure_type=fig.figure_type,
+                            figure_id=f"fig_p{page_num}_{len(figures) + 1}"
+                        ))
+                del pix
+            except Exception as cv_err:
+                logger.debug("Deep CV layout analysis on page %d skipped: %s", page_num, cv_err)
+
+        return raw_blocks, tables, figures
+

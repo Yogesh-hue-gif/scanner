@@ -23,13 +23,16 @@ window.ViewerView = {
     try {
       await window.appState.rehydrateSession();
     } catch (err) {
-      console.error("Failed to rehydrate session for Viewer:", err);
+      console.warn("No active session retrieved for Viewer:", err);
       container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">⚠️</div>
-          <div class="empty-state-title">Analysis Session Not Found</div>
-          <div class="empty-state-desc">The requested analysis session could not be retrieved from the persistent database.</div>
-          <button class="btn btn-primary" onclick="window.router.navigate('new_analysis')">Start New Analysis</button>
+        <div class="empty-state" style="padding: 70px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 440px; background: var(--bg-surface); border: 1px dashed var(--border-default); border-radius: var(--radius-lg); margin: 16px;">
+          <div class="empty-state-icon" style="font-size: 54px; margin-bottom: 16px; opacity: 0.85;">📄</div>
+          <h3 class="empty-state-title" style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">No Document Loaded</h3>
+          <p class="empty-state-desc" style="font-size: 13.5px; color: var(--text-muted); max-width: 480px; line-height: 1.5; margin-bottom: 24px;">No document or inspection session is currently active. Upload a document or select an existing inspection to view pages and defect annotations.</p>
+          <div style="display: flex; gap: 12px;">
+            <button class="btn btn-primary" onclick="window.router.navigate('new_analysis')">⚡ Start New Analysis</button>
+            <button class="btn btn-secondary" onclick="window.router.navigate('history')">📁 Analysis History</button>
+          </div>
         </div>
       `;
       return;
@@ -42,11 +45,14 @@ window.ViewerView = {
 
     if (!activeDoc && !sessionId) {
       container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">👁️</div>
-          <div class="empty-state-title">No Analysis Available</div>
-          <div class="empty-state-desc">Upload an engineering document and run an inspection to inspect pages and highlights.</div>
-          <button class="btn btn-primary" onclick="window.router.navigate('new_analysis')">Start New Analysis</button>
+        <div class="empty-state" style="padding: 70px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 440px; background: var(--bg-surface); border: 1px dashed var(--border-default); border-radius: var(--radius-lg); margin: 16px;">
+          <div class="empty-state-icon" style="font-size: 54px; margin-bottom: 16px; opacity: 0.85;">📄</div>
+          <h3 class="empty-state-title" style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">No Document Loaded</h3>
+          <p class="empty-state-desc" style="font-size: 13.5px; color: var(--text-muted); max-width: 480px; line-height: 1.5; margin-bottom: 24px;">Please select or upload an engineering document to inspect pages, view layout bounding boxes, and explore defect annotations.</p>
+          <div style="display: flex; gap: 12px;">
+            <button class="btn btn-primary" onclick="window.router.navigate('new_analysis')">⚡ Start New Analysis</button>
+            <button class="btn btn-secondary" onclick="window.router.navigate('history')">📁 Analysis History</button>
+          </div>
         </div>
       `;
       return;
@@ -108,14 +114,14 @@ window.ViewerView = {
 
     // Determine target page from URL param or appState
     let targetPage = params.page ? parseInt(params.page, 10) : window.appState.get("activePage");
-    const targetFindingId = params.finding_id || (window.appState.get("focusedFinding") && window.appState.get("focusedFinding").finding_id);
+    const targetFindingId = params.finding_id || (window.appState.get("focusedFinding") && (window.appState.get("focusedFinding").finding_id || window.appState.get("focusedFinding").id));
 
     if (targetFindingId && findings.length > 0) {
-      const match = findings.find((f) => f.finding_id === targetFindingId);
+      const match = findings.find((f) => f.finding_id === targetFindingId || f.id === targetFindingId || f.defect_id === targetFindingId);
       if (match) {
         window.appState.set("focusedFinding", match);
         setTimeout(() => {
-          this.viewerInstance.focusFinding(match);
+          this.viewerInstance.focusFindingById(targetFindingId);
         }, 150);
         return;
       }

@@ -20,13 +20,16 @@ window.DocumentInspectionView = {
     try {
       await window.appState.rehydrateSession();
     } catch (err) {
-      console.error("Failed to rehydrate session for Document Overview:", err);
+      console.warn("No active session retrieved for Document Overview:", err);
       container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">⚠️</div>
-          <div class="empty-state-title">Analysis Session Not Found</div>
-          <div class="empty-state-desc">The requested analysis session could not be retrieved from the persistent database.</div>
-          <button class="btn btn-primary" onclick="window.router.navigate('new_analysis')">Start New Analysis</button>
+        <div class="empty-state" style="padding: 70px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 440px; background: var(--bg-surface); border: 1px dashed var(--border-default); border-radius: var(--radius-lg); margin: 16px;">
+          <div class="empty-state-icon" style="font-size: 54px; margin-bottom: 16px; opacity: 0.85;">📑</div>
+          <h3 class="empty-state-title" style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">No Document Loaded</h3>
+          <p class="empty-state-desc" style="font-size: 13.5px; color: var(--text-muted); max-width: 480px; line-height: 1.5; margin-bottom: 24px;">No document analysis session is currently loaded. Please upload an engineering document or choose an existing inspection from history.</p>
+          <div style="display: flex; gap: 12px;">
+            <button class="btn btn-primary" onclick="window.router.navigate('new_analysis')">⚡ Start New Analysis</button>
+            <button class="btn btn-secondary" onclick="window.router.navigate('history')">📁 Analysis History</button>
+          </div>
         </div>
       `;
       return;
@@ -37,14 +40,17 @@ window.DocumentInspectionView = {
     let findings = window.appState.get("activeFindings") || [];
     const activeDomain = window.appState.get("activeDomain") || "Mechanical";
 
-    // 3. Display "No Analysis Available" ONLY when no session exists anywhere
+    // 3. Display "No Document Loaded" when no session exists
     if (!activeDoc && !sessionId) {
       container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">📑</div>
-          <div class="empty-state-title">No Analysis Available</div>
-          <div class="empty-state-desc">Upload an engineering document and run an inspection to inspect document structure and outline.</div>
-          <button class="btn btn-primary" onclick="window.router.navigate('new_analysis')">Start New Analysis</button>
+        <div class="empty-state" style="padding: 70px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 440px; background: var(--bg-surface); border: 1px dashed var(--border-default); border-radius: var(--radius-lg); margin: 16px;">
+          <div class="empty-state-icon" style="font-size: 54px; margin-bottom: 16px; opacity: 0.85;">📑</div>
+          <h3 class="empty-state-title" style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">No Document Loaded</h3>
+          <p class="empty-state-desc" style="font-size: 13.5px; color: var(--text-muted); max-width: 480px; line-height: 1.5; margin-bottom: 24px;">Upload an engineering document or select an existing inspection to inspect document outline, tables, figures, and page heatmaps.</p>
+          <div style="display: flex; gap: 12px;">
+            <button class="btn btn-primary" onclick="window.router.navigate('new_analysis')">⚡ Start New Analysis</button>
+            <button class="btn btn-secondary" onclick="window.router.navigate('history')">📁 Analysis History</button>
+          </div>
         </div>
       `;
       return;
@@ -97,10 +103,10 @@ window.DocumentInspectionView = {
           <div class="card-header">
             <div class="card-title">📑 Document Inspection Profile: ${escapeHtml(docName)}</div>
             <div style="display: flex; gap: 8px;">
-              <button class="btn btn-primary btn-sm" onclick="window.router.navigate('viewer')">
+              <button class="btn btn-primary btn-sm" onclick="window.router.navigate('viewer', { session_id: '${escapeHtml(sessionId || '')}' })">
                 👁️ Open Page Inspection Canvas
               </button>
-              <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('reports')">
+              <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('reports', { session_id: '${escapeHtml(sessionId || '')}' })">
                 📄 Export Report
               </button>
             </div>
