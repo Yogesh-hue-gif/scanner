@@ -46,13 +46,37 @@ set SPECGUARD_DATA_DIR=%SCRIPT_DIR%data
 set SPECGUARD_HOST=0.0.0.0
 set SPECGUARD_PORT=8765
 
+REM --- First-click LAN: ensure Windows Firewall allows inbound TCP on 8765 (Private) ---
+REM Needs admin once; silently skips if not elevated or rule exists.
+netsh advfirewall firewall show rule name="SpecGuard 8765" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [INFO] Adding Windows Firewall rule for TCP 8765 (Private) for LAN access...
+    netsh advfirewall firewall add rule name="SpecGuard 8765" dir=in action=allow protocol=TCP localport=8765 profile=private >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo [OK] Firewall rule added: SpecGuard 8765 (Private).
+    ) else (
+        echo [INFO] Could not auto-add firewall rule (run once as Administrator for LAN access).
+        echo [INFO] Manual: New-NetFirewallRule -DisplayName "SpecGuard 8765" -Direction Inbound -Protocol TCP -LocalPort 8765 -Profile Private -Action Allow
+    )
+) else (
+    echo [OK] Firewall rule present: SpecGuard 8765.
+)
+
 echo ==============================================================================
-echo   SpecGuard — Engineering Document Quality & Compliance Inspection Platform
+echo   SpecGuard — Engineering Document Quality ^& Compliance Inspection Platform
 echo ==============================================================================
 echo [INFO] Runtime Environment:  %ENV_DIR%
 echo [INFO] Starting 100%% Offline Web Server...
 echo [INFO] Local Web UI:         http://localhost:8765
-echo [INFO] LAN Access:           http://0.0.0.0:8765 (use this host's LAN IP)
+echo [INFO] LAN Access:           checking host IPv4 addresses...
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4 Address"') do (
+    set _ip=%%a
+    setlocal enabledelayedexpansion
+    set _ip=!_ip: =!
+    echo [INFO]   LAN client URL:      http://!_ip!:8765
+    endlocal
+)
+echo [INFO] Clients need same WiFi/LAN, no install. If blocked, allow TCP 8765 Private.
 echo [INFO] Press Ctrl+C or run STOP_SPECguard.bat to stop the server.
 echo ==============================================================================
 
