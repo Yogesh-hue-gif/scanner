@@ -66,8 +66,9 @@ SpecGuard-Offline-Conda/data/logs/*
 *.swp
 *~
 
-# Operating System Files
-.DS_Store
+# macOS Finder / archive metadata — never commit, never pack (caused win-64 bloat)
+__MACOSX/
+*.DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
