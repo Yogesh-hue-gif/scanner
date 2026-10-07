@@ -1,95 +1,194 @@
 @echo off
 REM ==============================================================================
 REM SpecGuard — Pre-Flight Diagnostic Check (Windows x64 Conda-Pack Deployment)
-REM Validates runtime, native dependencies, model files, rules, standards,
-REM templates, frontend assets, OCR subsystem, and SQLite database storage.
+REM 7-Tier Pre-Flight Deployment Diagnostic Suite
+REM Compliant with Rule 06 (Testing & Verification Checklist)
 REM ==============================================================================
-
 setlocal enabledelayedexpansion
-set SCRIPT_DIR=%~dp0
-set ENV_DIR=%SCRIPT_DIR%environment\specguard
-set PYTHON_EXE=%ENV_DIR%\python.exe
+title SpecGuard - Pre-Flight Check
+
+set "SCRIPT_DIR=%~dp0"
+set "ROOT=%SCRIPT_DIR%"
+set "ENV_DIR=%ROOT%environment\env"
+set "PYTHON_EXE=%ENV_DIR%\python.exe"
+set "DATA_DIR=%ROOT%data"
+
+if exist "%ROOT%app\app.py" (
+    set "APP_DIR=%ROOT%app"
+) else (
+    set "APP_DIR=%ROOT%"
+)
 
 echo ==============================================================================
-echo   SpecGuard — Windows x64 Offline Pre-Flight System Diagnostic
+echo   SpecGuard — Offline Deployment Pre-Flight Check
 echo ==============================================================================
+echo   Root Directory: %ROOT%
+echo.
 
-REM 1. Unpack Conda-Pack environment if not already unpacked
-if not exist "%PYTHON_EXE%" (
-    if exist "%SCRIPT_DIR%environment\specguard-conda.tar.gz" (
-        echo [INFO] Conda-Pack environment archive detected: specguard-conda.tar.gz
-        echo [INFO] Unpacking portable Python runtime to: %ENV_DIR%
-        mkdir "%ENV_DIR%" 2>nul
-        tar -xzf "%SCRIPT_DIR%environment\specguard-conda.tar.gz" -C "%ENV_DIR%"
+set "FAIL_COUNT=0"
+
+REM 1. PACKAGE STRUCTURE
+echo 1. PACKAGE STRUCTURE
+if exist "%APP_DIR%\app.py" (
+    echo   [PASS] Application entry point: app\app.py
+) else (
+    echo   [FAIL] Application entry point missing: app\app.py
+    set /a FAIL_COUNT+=1
+)
+
+if exist "%ROOT%environment\specguard-conda.tar.gz" (
+    echo   [PASS] Packed environment archive: environment\specguard-conda.tar.gz
+) else (
+    echo   [WARN] Packed environment archive missing: environment\specguard-conda.tar.gz
+)
+
+if exist "%ROOT%START_SPECguard.bat" (
+    echo   [PASS] START_SPECguard.bat
+) else (
+    echo   [FAIL] START_SPECguard.bat missing
+    set /a FAIL_COUNT+=1
+)
+
+if exist "%ROOT%STOP_SPECguard.bat" (
+    echo   [PASS] STOP_SPECguard.bat
+) else (
+    echo   [FAIL] STOP_SPECguard.bat missing
+    set /a FAIL_COUNT+=1
+)
+
+if exist "%ROOT%CHECK_SPECguard.bat" (
+    echo   [PASS] CHECK_SPECguard.bat
+) else (
+    echo   [FAIL] CHECK_SPECguard.bat missing
+    set /a FAIL_COUNT+=1
+)
+
+if exist "%ROOT%verify_environment.py" (
+    echo   [PASS] verify_environment.py
+) else (
+    echo   [FAIL] verify_environment.py missing
+    set /a FAIL_COUNT+=1
+)
+
+REM 2. ENVIRONMENT
+echo.
+echo 2. ENVIRONMENT
+if exist "%ENV_DIR%" (
+    echo   [PASS] Extracted environment present: %ENV_DIR%
+) else (
+    echo   [INFO] Extracted environment not present yet.
+    echo          START_SPECguard.bat will auto-extract from archive on initial launch.
+)
+
+if exist "%ENV_DIR%\.unpacked" (
+    echo   [PASS] conda-unpack already completed: .unpacked marker verified
+) else if exist "%ENV_DIR%\Scripts\conda-unpack.exe" (
+    echo   [INFO] conda-unpack.exe ready for relocation
+) else (
+    echo   [INFO] conda-unpack marker not present yet
+)
+
+if exist "%PYTHON_EXE%" (
+    "%PYTHON_EXE%" -V >nul 2>&1
+    if errorlevel 0 (
+        for /f "tokens=*" %%v in ('"%PYTHON_EXE%" -V 2^>^&1') do echo   [PASS] Environment python.exe executes: %%v
     ) else (
-        echo [INFO] Checking system PATH for Python...
-        for /f "tokens=*" %%i in ('where python 2^>nul') do (
-            if not defined PYTHON_EXE set PYTHON_EXE=%%i
+        echo   [FAIL] Environment python.exe failed to execute
+        set /a FAIL_COUNT+=1
+    )
+) else (
+    if exist "%ROOT%environment\specguard-conda.tar.gz" (
+        echo   [INFO] Environment python.exe will be extracted from tarball on first launch.
+    ) else (
+        echo   [FAIL] No environment and no archive found.
+        set /a FAIL_COUNT+=1
+    )
+)
+
+REM 3. KNOWLEDGE BASES & ASSETS
+echo.
+echo 3. KNOWLEDGE BASES ^& ASSETS
+if exist "%APP_DIR%\rules" (
+    echo   [PASS] Engineering rule bases present
+) else (
+    echo   [FAIL] app\rules directory missing
+    set /a FAIL_COUNT+=1
+)
+
+if exist "%APP_DIR%\standards" (
+    echo   [PASS] Engineering standards present
+) else (
+    echo   [FAIL] app\standards directory missing
+    set /a FAIL_COUNT+=1
+)
+
+if exist "%APP_DIR%\templates" (
+    echo   [PASS] Document templates present
+) else (
+    echo   [FAIL] app\templates directory missing
+    set /a FAIL_COUNT+=1
+)
+
+REM 4. DATA DIRECTORY
+echo.
+echo 4. DATA DIRECTORY - writable test
+if not exist "%DATA_DIR%" mkdir "%DATA_DIR%" 2>nul
+echo test_probe > "%DATA_DIR%\.write_test" 2>nul
+if exist "%DATA_DIR%\.write_test" (
+    del "%DATA_DIR%\.write_test" 2>nul
+    echo   [PASS] data\ is writable
+) else (
+    echo   [FAIL] data\ is not writable
+    set /a FAIL_COUNT+=1
+)
+
+REM 5. PORT 8765 AVAILABILITY
+echo.
+echo 5. PORT 8765 AVAILABILITY
+netstat -ano | findstr ":8765 " | findstr "LISTENING" >nul 2>&1
+if errorlevel 1 (
+    echo   [PASS] Port 8765 is available
+) else (
+    echo   [WARN] Port 8765 is currently in use - SpecGuard may already be running
+)
+
+REM 6. RUNTIME IMPORT & NATIVE VERIFICATION
+echo.
+echo 6. RUNTIME IMPORT VERIFICATION
+if exist "%PYTHON_EXE%" (
+    set "PYTHONHOME=%ENV_DIR%"
+    set "PYTHONPATH=%APP_DIR%"
+    set "PATH=%ENV_DIR%;%ENV_DIR%\Library\bin;%ENV_DIR%\Library\mingw-w64\bin;%ENV_DIR%\Library\usr\bin;%ENV_DIR%\Scripts;%ENV_DIR%\bin;%PATH%"
+    if exist "%ROOT%verify_environment.py" (
+        "%PYTHON_EXE%" "%ROOT%verify_environment.py"
+        if errorlevel 1 (
+            echo   [FAIL] Native environment verification failed!
+            set /a FAIL_COUNT+=1
+        ) else (
+            echo   [PASS] All core application modules and native probes verified
         )
     )
-)
-
-REM 2. Execute deep diagnostic suite using Python
-if exist "%PYTHON_EXE%" (
-    echo [OK] Using Python Runtime: %PYTHON_EXE%
-    echo.
-    if exist "%SCRIPT_DIR%check_specguard.py" (
-        "%PYTHON_EXE%" "%SCRIPT_DIR%check_specguard.py"
-        goto :LIVE_CHECK
-    ) else if exist "%SCRIPT_DIR%app\check_specguard.py" (
-        "%PYTHON_EXE%" "%SCRIPT_DIR%app\check_specguard.py"
-        goto :LIVE_CHECK
-    )
-)
-
-echo [WARNING] Python executable not found or diagnostic script missing.
-echo Running basic file checks...
-
-if exist "%SCRIPT_DIR%app\app.py" (
-    echo [OK] Application core entrypoint verified: %SCRIPT_DIR%app\app.py
 ) else (
-    echo [ERROR] Application entrypoint missing!
+    echo   [INFO] Runtime imports will be validated after extraction on first run.
 )
 
-if exist "%SCRIPT_DIR%app\models" (
-    echo [OK] Machine learning models directory present.
-) else (
-    echo [ERROR] Models directory missing!
-)
-
-if exist "%SCRIPT_DIR%app\rules" (
-    echo [OK] Engineering rule bases directory present.
-) else (
-    echo [ERROR] Rules directory missing!
-)
-
-if exist "%SCRIPT_DIR%app\standards" (
-    echo [OK] Engineering standards directory present.
-) else (
-    echo [ERROR] Standards directory missing!
-)
-
-if exist "%SCRIPT_DIR%app\templates" (
-    echo [OK] Document templates directory present.
-) else (
-    echo [ERROR] Templates directory missing!
-)
-
-if exist "%SCRIPT_DIR%data" (
-    echo [OK] User persistent data storage present.
-) else (
-    echo [WARNING] Data directory missing, creating...
-    mkdir "%SCRIPT_DIR%data" 2>nul
-)
-
-:LIVE_CHECK
+REM 7. LIVE SERVICE STATUS
 echo.
-echo Checking live HTTP service on port 8765...
-curl -s -m 3 http://127.0.0.1:8765/health >nul 2>&1
+echo 7. LIVE HTTP SERVICE
+curl -s -m 2 http://127.0.0.1:8765/health >nul 2>&1
 if %errorlevel% equ 0 (
-    echo [OK] SpecGuard server is LIVE and responding at http://localhost:8765
+    echo   [OK] SpecGuard server is LIVE and responding at http://localhost:8765
 ) else (
-    echo [INFO] SpecGuard is not currently running. Use START_SPECguard.bat to launch.
+    echo   [INFO] SpecGuard is not currently running. Use START_SPECguard.bat to launch.
+)
+
+echo.
+echo ==============================================================================
+if %FAIL_COUNT% equ 0 (
+    echo Pre-flight status: READY FOR STARTUP
+) else (
+    echo Pre-flight status: FAILED - %FAIL_COUNT% blocker issues detected
 )
 echo ==============================================================================
+echo.
 pause

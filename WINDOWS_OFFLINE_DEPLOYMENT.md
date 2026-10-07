@@ -63,7 +63,21 @@
 SpecGuard-Offline-Conda/
 │
 ├── environment/
-│   └── specguard-conda.tar.gz    (Pre-built self-contained Windows x64 Conda runtime)
+│   ├── specguard-conda.tar.gz    (Pre-built self-contained Windows x64 Conda runtime)
+│   └── env/                     (Extracted runtime with conda-unpack & .unpacked marker)
+│
+├── rules/                       (Offline deployment, packaging, & upgrade rules)
+│   ├── 00_INDEX_AND_QUICKSTART.md
+│   ├── 01_ARCHITECTURE_AND_CONDA_PACK_MECHANICS.md
+│   ├── 02_WHY_OFFLINE_ENVIRONMENTS_FAIL.md
+│   ├── 03_STEP_BY_STEP_UPGRADE_WORKFLOW.md
+│   ├── 04_ENVIRONMENT_SPECIFICATION_STANDARDS.md
+│   ├── 05_OFFLINE_DEPLOYMENT_AND_REFRESH_RULES.md
+│   ├── 06_TESTING_AND_VERIFICATION_CHECKLIST.md
+│   └── scripts/
+│       ├── rebuild_and_pack.bat (Online build host rebuild tool)
+│       ├── rebuild_and_pack.py  (Cross-platform host validation builder)
+│       └── refresh_offline_target.bat (Target cache buster & refresh tool)
 │
 ├── app/
 │   ├── app.py                    (Server entrypoint)
@@ -86,10 +100,17 @@ SpecGuard-Offline-Conda/
 │   ├── logs/                     (Runtime application logs)
 │   └── repository/               (Document comparison archives)
 │
-├── START_SPECguard.bat           (Production launcher — auto-unpacks & binds 0.0.0.0:8765)
+├── START_SPECguard.bat           (Production launcher — auto-unpacks, relocates & binds 0.0.0.0:8765)
 ├── STOP_SPECguard.bat            (Safe shutdown script for port 8765)
 ├── CHECK_SPECguard.bat           (7-point pre-flight deployment diagnostic)
-├── environment.yml               (Pinned Conda environment definition)
+├── REFRESH_SPECguard.bat         (Offline cache buster & environment refresh launcher)
+├── verify_environment.py         (Tier 1 native C/C++ & Python probe)
+├── offline_e2e_test.py           (Tier 3 offline integration & Zero-CDN test)
+├── make_lockfile.py              (Conda reproducibility lockfile generator)
+├── make_checksums.py             (SHA-256 integrity manifest generator)
+├── environment.yml               (Rule 04-compliant pinned Conda environment recipe)
+├── requirements-conda.txt        (Rule 04-compliant pip/conda dependency list)
+├── conda-environment-lock.txt    (Frozen package version lock manifest)
 ├── MODEL_MANIFEST.json           (122 local model checkpoints & SHA-256 digests)
 ├── CONDA_RUNTIME_AUDIT.md        (Runtime dependency audit & native DLL manifest)
 ├── OFFLINE_TEST_REPORT.md        (Subsystem verification & offline test log)

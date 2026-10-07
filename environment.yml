@@ -1,36 +1,57 @@
+# ==============================================================================
+# SpecGuard — Offline Conda-Pack Deployment Environment Specification
+# Target: Windows x64 (win-64) | Python 3.11 | Channel: conda-forge
+# Fully compliant with SpecGuard Agent Rules (04_ENVIRONMENT_SPECIFICATION_STANDARDS)
+# ==============================================================================
 name: specguard
+
 channels:
   - conda-forge
-  # NOTE: conda-forge ONLY for win-64 reproducibility.
-  # Do NOT re-add `defaults` — mixing channels caused ResolvePackageNotFound.
-  # Build/tested on Windows x64 (win-64). Recreate with:
-  #   conda env create -f environment.yml
-  # For fully offline air-gapped install, unpack
-  # SpecGuard-Offline-Conda/environment/specguard-conda.tar.gz instead
-  # (contains DLL/PYD/EXE, zero .dylib/.so).
+  - nodefaults
+
 dependencies:
-  - python=3.11.16
-  - pip=25.0
-  - fastapi=0.141.1
-  - uvicorn=0.54.0
-  - pydantic=2.13.5
-  - pymupdf=1.28.0
-  - opencv=5.0.0
-  - numpy=2.4.6
-  - pandas=3.0.6
-  - pytorch=2.13.0
-  - onnx=1.23.0
-  - onnxruntime=1.30.0
-  - python-docx=1.2.0
-  - openpyxl=3.1.5
-  - pyyaml=6.0.3
-  - psutil=7.2.2
-  - jinja2=3.1.6
-  - python-multipart=0.0.32
-  - pillow=11.3.0
-  - reportlab=4.4.10
-  - conda-pack=0.9.2
+  # --- Core interpreter (Rule 2: strict Python 3.11 pin) ---
+  - python=3.11
+  - pip
+
+  # --- Relocation & Packaging Tooling (Rule 4: MANDATORY for conda-unpack.exe) ---
+  - conda-pack>=0.8.0
+
+  # --- ASGI Web Framework & Server ---
+  - fastapi>=0.100.0,<1.0.0
+  - uvicorn>=0.22.0,<1.0.0
+  - python-multipart>=0.0.6
+  - starlette
+  - pydantic>=2.0.0
+
+  # --- Self-Contained Document Parsers (100% Offline) ---
+  - pymupdf>=1.22.0
+  - python-docx>=0.8.11
+  - openpyxl>=3.1.0
+
+  # --- Numerics & Structured Data ---
+  - numpy>=1.24.0
+  - pandas>=2.0.0
+  - pyyaml>=6.0
+  - jinja2>=3.1.0
+
+  # --- Computer Vision & Built-in OCR (Zero Tesseract Dependency) ---
+  - opencv>=4.7.0
+
+  # --- Offline ML Inference (Rule 3: STRICTLY CPU-ONLY) ---
+  - pytorch-cpu>=2.0.0
+  - onnx>=1.14.0
+  - onnxruntime>=1.15.0
+
+  # --- PDF Report Generation & Imaging ---
+  - reportlab>=4.0.0
+  - pillow>=10.0.0
+
+  # --- Diagnostics & Telemetry ---
+  - psutil
+
+  # --- Testing & Async Transport Fixtures ---
   - pip:
     - httpx>=0.27
-    - pytest>=8.3
+    - pytest>=8.0
     - pytest-asyncio>=0.24

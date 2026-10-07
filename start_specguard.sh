@@ -6,7 +6,7 @@
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_DIR="$SCRIPT_DIR/environment/specguard"
+ENV_DIR="$SCRIPT_DIR/environment/env"
 PYTHON_BIN="$ENV_DIR/bin/python"
 
 if [ ! -f "$PYTHON_BIN" ]; then

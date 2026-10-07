@@ -42,13 +42,15 @@ Key capabilities:
 3. Extract the folder to any location of your choice (for example: `C:\SpecGuard`
    or your Desktop `C:\Users\<YourUser>\Desktop\SpecGuard-Offline-Conda`).
 4. Enter the extracted folder. You will see:
-   - `START_SPECguard.bat`
-   - `STOP_SPECguard.bat`
-   - `CHECK_SPECguard.bat`
-   - `app\`
-   - `environment\`
-   - `runtime\`
-   - `data\`
+   - `START_SPECguard.bat`   : Production server launcher
+   - `STOP_SPECguard.bat`    : Clean server shutdown script
+   - `CHECK_SPECguard.bat`   : Pre-flight deployment diagnostic
+   - `REFRESH_SPECguard.bat` : Environment refresh & cache buster (for upgrades)
+   - `rules\`                : Offline deployment, upgrade, and packaging standards
+   - `app\`                  : Read-only application code and models
+   - `environment\`          : Portable Conda-Pack runtime archive
+   - `runtime\`              : Bundled native tools
+   - `data\`                 : Persistent data storage (database, logs, uploads)
 
 
 4. PRE-FLIGHT VERIFICATION (HOW TO RUN CHECK_SPECguard.bat)
