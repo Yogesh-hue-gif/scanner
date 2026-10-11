@@ -1,6 +1,7 @@
 /* ==========================================================================
    SpecGuard Findings & Document Inspection Styles
    Strictly local offline CSS for error inspection, localization, & reports.
+   Split-pane layout, precision defect overlays, inline status toggles.
    ========================================================================== */
 
 /* --- Document Findings Layout --- */
@@ -9,21 +10,24 @@
   flex-direction: column;
   gap: 16px;
   width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .findings-toolbar-card {
-  background: var(--bg-surface);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: 14px 18px;
-  box-shadow: var(--shadow-sm);
+  padding: 10px 16px;
+  box-shadow: var(--shadow-xs);
+  flex-shrink: 0;
 }
 
 .findings-filter-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .filter-group {
@@ -33,666 +37,301 @@
 }
 
 .filter-label {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* --- Findings Table & Inspection --- */
-.findings-table-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-
-.findings-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12.5px;
-}
-
-.findings-table th {
-  background: var(--bg-surface-sunken);
-  padding: 10px 14px;
-  text-align: left;
   font-size: 11px;
   font-weight: 700;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-default);
 }
 
-.findings-table td {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-  vertical-align: middle;
-}
-
-.findings-table tr:hover td {
-  background: var(--bg-hover);
-  cursor: pointer;
-}
-
-.findings-table tr.selected td {
-  background: rgba(37, 99, 235, 0.08);
-  border-left: 3px solid var(--accent-primary);
-}
-
-/* --- Detailed Inspection Drawer / Panel --- */
-.inspection-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  box-shadow: var(--shadow-md);
-}
-
-.inspection-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  border-bottom: 1px solid var(--border-default);
-  padding-bottom: 12px;
-}
-
-.inspection-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.finding-code-id {
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--text-primary);
-}
-
-.finding-issue-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.inspection-location-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-/* Comparison Blocks: Detected vs Expected */
-.inspection-comparison-grid {
+/* Split-Pane Findings Coordinated Layout */
+.findings-split-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 6px 0;
-}
-
-@media (max-width: 768px) {
-  .inspection-comparison-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.comparison-box {
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.comparison-box.detected {
-  background: rgba(220, 38, 38, 0.06);
-  border: 1px solid rgba(220, 38, 38, 0.25);
-  border-left: 4px solid var(--sev-critical);
-}
-
-.comparison-box.expected {
-  background: rgba(16, 185, 129, 0.06);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  border-left: 4px solid #10b981;
-}
-
-.comparison-label {
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-
-.comparison-box.detected .comparison-label {
-  color: var(--sev-critical);
-}
-
-.comparison-box.expected .comparison-label {
-  color: #059669;
-}
-
-.comparison-value {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.45;
-  word-break: break-word;
-  white-space: pre-wrap;
-}
-
-.comparison-box.detected .comparison-value {
-  color: var(--text-primary);
-}
-
-.comparison-box.expected .comparison-value {
-  color: #047857;
-  font-weight: 600;
-}
-
-/* Explanation & Why */
-.inspection-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.inspection-section-label {
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-}
-
-.inspection-explanation-text {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-primary);
-}
-
-.inspection-remediation-box {
-  background: rgba(37, 99, 235, 0.06);
-  border: 1px solid rgba(37, 99, 235, 0.2);
-  border-left: 4px solid var(--accent-primary);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-}
-
-.remediation-notice {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--accent-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-}
-
-.remediation-guidance {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.45;
-}
-
-/* Inspection Metadata & Evidence */
-.inspection-meta-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  background: var(--bg-surface-sunken);
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  font-size: 11.5px;
-}
-
-.meta-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.meta-item-label {
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.meta-item-val {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-weight: 600;
-}
-
-/* --- Page Issue Heatmap --- */
-.page-heatmap-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px 18px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-}
-
-.heatmap-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 6px;
-  border-radius: var(--radius-sm);
-  transition: background 0.15s ease;
-  cursor: pointer;
-}
-
-.heatmap-row:hover {
-  background: var(--bg-hover);
-}
-
-.heatmap-page-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  min-width: 60px;
-}
-
-.heatmap-bar-track {
-  flex: 1;
-  height: 18px;
-  background: var(--bg-surface-sunken);
-  border-radius: 4px;
-  overflow: hidden;
-  position: relative;
-  border: 1px solid var(--border-subtle);
-}
-
-.heatmap-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-  display: flex;
-  align-items: center;
-  padding-left: 6px;
-}
-
-.heatmap-bar-fill.density-critical {
-  background: linear-gradient(90deg, #dc2626, #ef4444);
-}
-
-.heatmap-bar-fill.density-high {
-  background: linear-gradient(90deg, #ea580c, #f97316);
-}
-
-.heatmap-bar-fill.density-medium {
-  background: linear-gradient(90deg, #d97706, #f59e0b);
-}
-
-.heatmap-bar-fill.density-low {
-  background: linear-gradient(90deg, #2563eb, #3b82f6);
-}
-
-.heatmap-count-badge {
-  font-size: 11px;
-  font-weight: 800;
-  min-width: 32px;
-  text-align: right;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-}
-
-/* --- Category Breakdown Grid --- */
-.categories-breakdown-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
-}
-
-.category-stat-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  transition: transform 0.15s ease, border-color 0.15s ease;
-  cursor: pointer;
-}
-
-.category-stat-card:hover {
-  border-color: var(--accent-primary);
-  transform: translateY(-2px);
-}
-
-.cat-stat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.cat-stat-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-}
-
-.cat-stat-icon {
-  font-size: 16px;
-}
-
-.cat-stat-count {
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text-primary);
-  margin-top: 2px;
-}
-
-.cat-stat-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-/* --- Formatting Inspector Specifics --- */
-.formatting-groups-tabs {
-  display: flex;
-  gap: 6px;
-  border-bottom: 2px solid var(--border-default);
-  padding-bottom: 2px;
-  overflow-x: auto;
-}
-
-.formatting-tab-btn {
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 700;
-  background: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.formatting-tab-btn:hover {
-  color: var(--text-primary);
-}
-
-.formatting-tab-btn.active {
-  color: var(--accent-primary);
-  border-bottom-color: var(--accent-primary);
-}
-
-.issue-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow: var(--shadow-sm);
-  transition: border-color 0.15s ease;
-}
-
-.issue-card:hover {
-  border-color: var(--border-focus);
-}
-
-.issue-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-/* --- Coordinated Finding Details & Document Inspection Layout --- */
-.findings-coordinated-layout {
-  display: flex;
+  grid-template-columns: 420px 1fr;
   gap: 16px;
   flex: 1 1 auto;
   min-height: 0;
-  min-width: 0;
-  width: 100%;
-  height: 100%;
   overflow: hidden;
 }
 
-.finding-info-column {
-  flex: 0 0 440px;
-  max-width: 480px;
-  min-width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  overflow-y: auto;
-  overflow-x: hidden;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  padding: 18px;
-  box-shadow: var(--shadow-sm);
-  min-height: 0;
-  max-height: 100%;
+@media (max-width: 1180px) {
+  .findings-split-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
 }
 
-.document-inspection-column {
+/* Left Pane: Finding Audit List / Selection Table */
+.findings-list-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+  min-height: 0;
+}
+
+.findings-list-header {
+  padding: 12px 16px;
+  background-color: var(--bg-sunken);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.findings-list-scroll {
   flex: 1 1 auto;
-  min-width: 0;
+  overflow-y: auto;
   min-height: 0;
+}
+
+.finding-card-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all var(--transition-fast);
   display: flex;
   flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+
+.finding-card-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.finding-card-item.selected {
+  background-color: var(--accent-blue-subtle);
+  border-left: 3px solid var(--accent-blue);
+}
+
+.finding-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.finding-card-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.finding-card-loc {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  background-color: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+}
+
+.finding-card-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.finding-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+/* Right Pane: Coordinated Sticky Document Preview & Precision Annotation */
+.findings-preview-pane {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
+  min-height: 0;
 }
 
-.inspection-column-header {
-  padding: 8px 16px;
-  background: var(--bg-surface-sunken);
-  border-bottom: 1px solid var(--border-default);
+.preview-toolbar {
+  padding: 10px 16px;
+  background-color: var(--bg-sunken);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
 }
 
-.inspection-column-title {
-  font-size: 11.5px;
-  font-weight: 800;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Dedicated Defect Location Card (Section 7) */
-.defect-location-card {
-  background: var(--bg-surface-sunken);
-  border: 1px solid var(--border-default);
-  border-left: 4px solid var(--accent-primary);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.defect-location-title {
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--accent-primary);
-  margin-bottom: 4px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.defect-location-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 12px;
-  font-size: 12px;
-}
-
-.defect-location-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.defect-location-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-.defect-location-value {
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-}
-
-.defect-location-region {
-  grid-column: span 2;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  background: var(--bg-surface);
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-  word-break: break-all;
-  color: var(--text-secondary);
-}
-
-/* Missing Content Alert Banner (Section 14) */
-.missing-content-alert {
-  background: rgba(220, 38, 38, 0.08);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  border-left: 4px solid #dc2626;
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.missing-alert-header {
-  font-size: 11px;
-  font-weight: 800;
-  color: #dc2626;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.missing-alert-target {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.missing-alert-note {
-  font-size: 11.5px;
-  color: var(--text-secondary);
-}
-
-/* Multi-Locations Navigator Box (Section 15) */
-.multi-locations-box {
-  background: var(--bg-surface-sunken);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.multi-locations-title {
-  font-size: 10.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
-}
-
-.multi-locations-btn-group {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.multi-location-btn {
-  padding: 5px 10px;
-  font-size: 11.5px;
-  font-weight: 700;
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  color: var(--accent-primary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.multi-location-btn:hover {
-  background: var(--accent-primary);
-  color: #ffffff;
-  border-color: var(--accent-primary);
-}
-
-/* Show in Document Action Button (Section 17) */
-.btn-show-in-doc {
-  background: linear-gradient(135deg, #0284c7, #2563eb);
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 10px 16px;
-  font-size: 13px;
-  font-weight: 800;
+.preview-viewport {
+  flex: 1 1 auto;
+  overflow: auto;
+  background-color: var(--bg-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  padding: 24px;
+  position: relative;
+}
+
+.preview-canvas-wrap {
+  position: relative;
+  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-xs);
+  background-color: #ffffff;
+  display: inline-block;
+  line-height: 0;
+}
+
+.preview-canvas-wrap img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Millimeter Precision Indicator Overlays */
+.defect-overlay-box {
+  position: absolute;
+  border: 2px solid var(--sev-critical);
+  background-color: rgba(220, 38, 38, 0.15);
+  box-shadow: 0 0 10px var(--sev-critical-glow);
+  pointer-events: auto;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
-  transition: all 0.15s ease;
-  width: 100%;
+  z-index: 20;
+  transition: all var(--transition-fast);
 }
 
-.btn-show-in-doc:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.45);
+.defect-overlay-box.severity-high {
+  border-color: var(--sev-high);
+  background-color: rgba(234, 88, 12, 0.15);
 }
 
-/* Quick Finding Switcher */
-.finding-nav-bar {
+.defect-overlay-box.severity-medium {
+  border-color: var(--sev-medium);
+  background-color: rgba(217, 119, 6, 0.15);
+}
+
+.defect-overlay-box.severity-low {
+  border-color: var(--sev-low);
+  background-color: rgba(37, 99, 235, 0.15);
+}
+
+.defect-overlay-box:hover {
+  transform: scale(1.02);
+  z-index: 30;
+  box-shadow: 0 0 14px var(--accent-blue);
+}
+
+.defect-crosshair-label {
+  position: absolute;
+  top: -24px;
+  left: 0;
+  background: var(--sev-critical);
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 4px;
 }
 
+.defect-mm-coords {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+/* Defect Detail Audit Box */
+.finding-audit-detail {
+  padding: 16px 20px;
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.audit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.audit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--bg-tertiary);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.audit-field-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.audit-field-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.audit-diff-block {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.diff-box {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.diff-box.detected {
+  background-color: var(--sev-critical-bg);
+  border: 1px solid var(--sev-critical-border);
+  color: var(--sev-critical);
+}
+
+.diff-box.expected {
+  background-color: var(--emerald-success-bg);
+  border: 1px solid var(--emerald-success-border);
+  color: var(--emerald-success);
+}
+
+.diff-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.diff-content {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}

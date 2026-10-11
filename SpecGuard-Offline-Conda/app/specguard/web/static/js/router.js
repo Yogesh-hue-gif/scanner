@@ -2,26 +2,27 @@
  * SpecGuard Single-Page Application Router
  * Manages hash-based routing with canonical query parameter preservation,
  * active view lifecycle, breadcrumbs navigation, and persistent route rehydration.
+ * Guaranteed 100% Client-Side with Zero Full-Page Browser Reloads.
  */
 
 class Router {
   constructor() {
     this.routes = {
-      dashboard: { title: "Quality Dashboard", view: window.DashboardView },
-      new_analysis: { title: "New Document Analysis", view: window.NewAnalysisView },
-      progress: { title: "Analysis Progress", view: window.AnalysisProgressView },
-      workspace: { title: "Analysis Progress", view: window.AnalysisProgressView },
-      results: { title: "Analysis Results", view: window.ResultsView },
-      findings: { title: "Document Findings", view: window.FindingsView },
-      overview: { title: "Document Overview & Structure", view: window.DocumentInspectionView },
-      viewer: { title: "Page Inspection", view: window.ViewerView },
-      formatting: { title: "Formatting Issues", view: window.FormattingView },
-      structural: { title: "Structural Issues", view: window.StructuralIssuesView },
-      content: { title: "Content & Engineering Issues", view: window.ContentIssuesView },
-      reports: { title: "Inspection Reports", view: window.ReportsView },
-      history: { title: "Analysis History", view: window.HistoryView },
-      standards: { title: "Standards & Rules", view: window.StandardsView },
-      settings: { title: "Settings & Health", view: window.SettingsView }
+      dashboard: { title: "Quality Dashboard", getView: () => window.DashboardView },
+      new_analysis: { title: "New Document Analysis", getView: () => window.NewAnalysisView },
+      progress: { title: "Analysis Progress", getView: () => window.AnalysisProgressView },
+      workspace: { title: "Analysis Progress", getView: () => window.AnalysisProgressView },
+      results: { title: "Analysis Results", getView: () => window.ResultsView },
+      findings: { title: "Document Findings", getView: () => window.FindingsView },
+      overview: { title: "Document Overview & Structure", getView: () => window.DocumentInspectionView },
+      viewer: { title: "Page Inspection", getView: () => window.ViewerView },
+      formatting: { title: "Formatting Issues", getView: () => window.FormattingView },
+      structural: { title: "Structural Issues", getView: () => window.StructuralIssuesView },
+      content: { title: "Content & Engineering Issues", getView: () => window.ContentIssuesView },
+      reports: { title: "Inspection Reports", getView: () => window.ReportsView },
+      history: { title: "Analysis History", getView: () => window.HistoryView },
+      standards: { title: "Standards & Rules", getView: () => window.StandardsView },
+      settings: { title: "Settings & Health", getView: () => window.SettingsView }
     };
 
     this.RESULT_DEPENDENT_ROUTES = [
@@ -56,7 +57,7 @@ class Router {
     let routeName = cleaned;
     const params = {};
 
-    // 1. Parse query params from hash if present (e.g. overview?session_id=CMP-123)
+    // 1. Parse query params from hash if present (e.g. findings?session_id=CMP-123)
     if (cleaned.includes("?")) {
       const parts = cleaned.split("?");
       routeName = parts[0];
@@ -177,8 +178,15 @@ class Router {
         this.container.classList.remove("no-scroll-view");
       }
       this.container.scrollTop = 0;
-      this.container.innerHTML = `<div class="empty-state"><div class="spinner" style="margin: 0 auto 16px;"></div><div>Loading view...</div></div>`;
-      routeConfig.view.render(this.container);
+      this.container.innerHTML = `<div class="empty-state" style="padding: 40px; text-align: center;"><div class="spinner" style="margin: 0 auto 16px;"></div><div>Loading view...</div></div>`;
+      
+      const viewObj = routeConfig.getView();
+      if (viewObj && typeof viewObj.render === "function") {
+        viewObj.render(this.container);
+      } else {
+        console.error(`View for route '${routeName}' is not available.`);
+        this.container.innerHTML = `<div class="empty-state" style="padding: 40px; text-align: center;"><div style="color: var(--rose-danger); font-weight: 700;">View '${routeName}' failed to load.</div></div>`;
+      }
     }
   }
 }

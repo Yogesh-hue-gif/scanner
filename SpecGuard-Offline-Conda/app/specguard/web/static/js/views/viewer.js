@@ -92,9 +92,19 @@ window.ViewerView = {
             </span>
           </div>
 
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-muted);">
+              <span>Filter:</span>
+              <select id="viewer-quick-status-filter" class="form-select" style="height: 28px; font-size: 11.5px; width: 100px; padding: 2px 6px;"
+                      onchange="if(window.currentViewer){ window.currentViewer.activeSeverityFilter = this.value; window.currentViewer.renderSidebarList(); window.currentViewer.renderDefectOverlays(); }">
+                <option value="ALL">All Defects</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+              </select>
+            </div>
             <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('findings')">
-              📋 Document Findings (${findings.length})
+              📋 Finding Audit (${findings.length})
             </button>
             <button class="btn btn-primary btn-sm" onclick="window.router.navigate('reports')">
               📄 Export Report

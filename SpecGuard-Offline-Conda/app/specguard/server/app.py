@@ -82,18 +82,18 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
-    # Register API Routers
-    api_prefix = "/api"
-    app.include_router(router_dashboard, prefix=api_prefix)
-    app.include_router(router_analysis, prefix=api_prefix)
-    app.include_router(router_documents, prefix=api_prefix)
-    app.include_router(router_findings, prefix=api_prefix)
-    app.include_router(router_history, prefix=api_prefix)
-    app.include_router(router_reports, prefix=api_prefix)
-    app.include_router(router_standards, prefix=api_prefix)
-    app.include_router(router_models, prefix=api_prefix)
-    app.include_router(router_templates, prefix=api_prefix)
-    app.include_router(router_settings, prefix=api_prefix)
+    # Register API Routers (Support both /api and /api/v1 for enterprise versioning)
+    for api_prefix in ["/api", "/api/v1"]:
+        app.include_router(router_dashboard, prefix=api_prefix)
+        app.include_router(router_analysis, prefix=api_prefix)
+        app.include_router(router_documents, prefix=api_prefix)
+        app.include_router(router_findings, prefix=api_prefix)
+        app.include_router(router_history, prefix=api_prefix)
+        app.include_router(router_reports, prefix=api_prefix)
+        app.include_router(router_standards, prefix=api_prefix)
+        app.include_router(router_models, prefix=api_prefix)
+        app.include_router(router_templates, prefix=api_prefix)
+        app.include_router(router_settings, prefix=api_prefix)
 
     # Health check endpoints (100% Offline Subsystem Reporting):
     @app.get("/health")

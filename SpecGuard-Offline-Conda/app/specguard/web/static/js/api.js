@@ -5,7 +5,7 @@
  */
 
 class ApiClient {
-  constructor(baseUrl = "/api") {
+  constructor(baseUrl = "/api/v1") {
     this.baseUrl = baseUrl;
   }
 
@@ -18,7 +18,13 @@ class ApiClient {
     }
 
     try {
-      const response = await fetch(url, { ...options, headers });
+      let response = await fetch(url, { ...options, headers });
+      if (!response.ok && response.status === 404 && this.baseUrl === "/api/v1") {
+        // Transparent fallback to /api if server is running older route config
+        const fallbackUrl = `/api${endpoint}`;
+        const fallbackRes = await fetch(fallbackUrl, { ...options, headers });
+        if (fallbackRes.ok) return await fallbackRes.json();
+      }
       if (!response.ok) {
         let errMessage = `HTTP ${response.status}: ${response.statusText}`;
         try {
@@ -76,6 +82,13 @@ class ApiClient {
     get: (findingId, sessionId = null) => {
       const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
       return this.request(`/findings/${encodeURIComponent(findingId)}${qs}`);
+    },
+    updateStatus: (findingId, status, sessionId = null) => {
+      const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : "";
+      return this.request(`/findings/${encodeURIComponent(findingId)}/status${qs}`, {
+        method: "POST",
+        body: JSON.stringify({ status })
+      });
     }
   };
 

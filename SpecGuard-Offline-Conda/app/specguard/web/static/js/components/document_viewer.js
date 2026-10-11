@@ -1468,6 +1468,27 @@ class DocumentViewerComponent {
       `;
     }
 
+    const currentStatus = f.status || norm.status || "Flagged";
+    const statusHtml = `
+      <div style="margin: 8px 0; display: flex; align-items: center; justify-content: space-between; background: var(--bg-surface-sunken); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-default);">
+        <span style="font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Lifecycle Status:</span>
+        <div class="status-toggle-pill">
+          <span class="status-toggle-option ${currentStatus === 'Accepted' ? 'active-accepted' : ''}"
+                onclick="window.currentViewer && window.currentViewer.setFindingStatus('${escapeHtml(norm.finding_id)}', 'Accepted')">
+            Accepted
+          </span>
+          <span class="status-toggle-option ${currentStatus === 'Flagged' ? 'active-flagged' : ''}"
+                onclick="window.currentViewer && window.currentViewer.setFindingStatus('${escapeHtml(norm.finding_id)}', 'Flagged')">
+            Flagged
+          </span>
+          <span class="status-toggle-option ${currentStatus === 'Fixed' ? 'active-fixed' : ''}"
+                onclick="window.currentViewer && window.currentViewer.setFindingStatus('${escapeHtml(norm.finding_id)}', 'Fixed')">
+            Fixed
+          </span>
+        </div>
+      </div>
+    `;
+
     drawerContent.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: space-between;">
         <span style="font-size: 14px; font-weight: 800; color: var(--text-primary);">${escapeHtml(norm.finding_id)}</span>
@@ -1478,6 +1499,8 @@ class DocumentViewerComponent {
           <span class="badge ${sevClass}">${escapeHtml(norm.severity)}</span>
         </div>
       </div>
+
+      ${statusHtml}
 
       <div class="finding-prop-group">
         <span class="finding-prop-label">Category & Issue Type</span>
@@ -1575,6 +1598,25 @@ class DocumentViewerComponent {
       } else {
         issueCounter.textContent = `${filteredList.length} Issues`;
       }
+    }
+  }
+
+  async setFindingStatus(findingId, newStatus) {
+    const f = this.findings.find(x => x.finding_id === findingId || x.id === findingId);
+    if (f) {
+      f.status = newStatus;
+      if (this.focusedFinding && (this.focusedFinding.finding_id === findingId || this.focusedFinding.id === findingId)) {
+        this.focusedFinding.status = newStatus;
+        this.updateDrawerContent(this.focusedFinding);
+      }
+      this.renderSidebarList();
+    }
+    const sessionId = window.appState.get("activeSessionId");
+    try {
+      await window.api.findings.updateStatus(findingId, newStatus, sessionId);
+      window.toast.success(`Finding ${findingId} marked as ${newStatus}`);
+    } catch (e) {
+      window.toast.info(`Status updated to ${newStatus}`);
     }
   }
 }

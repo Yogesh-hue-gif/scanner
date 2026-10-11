@@ -249,6 +249,7 @@ def list_findings(
                 "rule_id": r["rule_reference"] or f_id,
                 "priority_score": r["priority_score"],
                 "evidence": "",
+                "status": r["status"] if "status" in r.keys() and r["status"] else "Flagged",
                 "source_analyzer": "SpecGuard Inspection Engine",
                 "issue_type": "",
                 "matched_text": str(r["detected_value"] or r["original_content"] or ""),
@@ -388,3 +389,31 @@ def get_finding_detail(finding_id: str, session_id: Optional[str] = None) -> Dic
             pass
 
         return _enrich_finding_location_metadata(res)
+
+
+@router.patch("/{finding_id}/status")
+@router.post("/{finding_id}/status")
+def update_finding_status(
+    finding_id: str,
+    payload: Dict[str, Any],
+    session_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """Updates finding lifecycle status (Accepted, Flagged, Fixed)."""
+    new_status = payload.get("status", "Flagged")
+    if new_status not in ["Accepted", "Flagged", "Fixed", "Ignored"]:
+        raise HTTPException(status_code=400, detail="Invalid status value. Must be Accepted, Flagged, or Fixed.")
+    
+    db = DatabaseManager()
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        for tbl in ["repo_findings", "findings"]:
+            try:
+                cursor.execute(f"UPDATE {tbl} SET status = ? WHERE finding_id = ?", (new_status, finding_id))
+            except Exception:
+                try:
+                    cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN status TEXT DEFAULT 'Flagged'")
+                    cursor.execute(f"UPDATE {tbl} SET status = ? WHERE finding_id = ?", (new_status, finding_id))
+                except Exception:
+                    pass
+        conn.commit()
+    return {"status": "ok", "finding_id": finding_id, "new_status": new_status}
