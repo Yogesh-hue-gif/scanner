@@ -1,0 +1,24 @@
+name: docready-win64
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11.16
+  - pip>=24.0
+  - numpy=1.26.4
+  - pandas=2.2.2
+  - pyyaml=6.0.2
+  - sqlite=3.45.3
+  - pip:
+      - pymupdf==1.24.1
+      - opencv-python-headless==4.10.0.84
+      - python-docx==1.1.2
+      - openpyxl==3.1.5
+      - fastapi==0.115.0
+      - uvicorn==0.32.0
+      - python-multipart==0.0.12
+      - pydantic==2.9.2
+      - onnxruntime==1.19.2
+      - torch==2.4.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+      - conda-pack==0.7.1

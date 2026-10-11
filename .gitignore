@@ -1,15 +1,40 @@
-*.zip
-*.pdf
-*.tar.gz
-*.exe
-*.7z
-.conda/
-venv/
+# Python & Environments
 .venv/
+env/
+venv/
+ENV/
+dist/
+*.egg-info/
+DocReady-Windows-x64/
+*.zip
+
+# Byte-code & caches
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Local databases, uploads & runtime logs
+data/
+logs/
+/repository/
+/datasets/
+models/
 *.db
-*.db-shm
-*.db-wal
-**/environment/
-**/runtime/
+*.sqlite3
+reports/
+*.log
+*.tar
+*.tar.gz
+SpecGuard-Docker-Offline/
+scanner-main (2)/
+scanner-main*/
+
+# Operating System
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

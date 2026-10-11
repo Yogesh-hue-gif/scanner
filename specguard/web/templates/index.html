@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <title>DocReady — Offline Engineering Document Readiness Verification</title>
+  <meta name="description" content="DocReady: Offline Engineering Document Readiness Verification Platform (Windows x64 Edition v1.0)" />
+
+  <!-- Prevent Theme FOUC -->
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem("docready-theme") || localStorage.getItem("specguard-theme");
+      const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = savedTheme || (systemDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+
+  <!-- Local Offline CSS Stylesheets -->
+  <link rel="stylesheet" href="/static/css/base.css" />
+  <link rel="stylesheet" href="/static/css/layout.css" />
+  <link rel="stylesheet" href="/static/css/components.css" />
+  <link rel="stylesheet" href="/static/css/views.css" />
+  <link rel="stylesheet" href="/static/css/findings.css" />
+</head>
+<body>
+  <div id="app-root">
+    <!-- 1. Top Header -->
+    <header class="app-header">
+      <div class="header-brand" style="cursor: pointer;" onclick="window.router.navigate('home')">
+        <div class="brand-emblem" aria-hidden="true">🛡️</div>
+        <div class="brand-titles">
+          <div class="brand-title">
+            SPECGUARD
+            <span class="version-tag">DocReady v1.0.0</span>
+          </div>
+          <div class="brand-subtitle">Engineering Document Quality & Compliance Inspection</div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="status-indicator-pill" title="Local LAN / Intranet Operation. Zero telemetry. Zero external calls.">
+          <span class="status-dot"></span>
+          <span>Local / LAN Mode</span>
+        </div>
+
+        <button class="btn btn-secondary btn-icon" id="header-theme-toggle" onclick="window.app.toggleTheme()" title="Toggle Dark/Light Theme">
+          🌙
+        </button>
+
+        <button class="btn btn-primary btn-sm" onclick="window.router.navigate('new_analysis')">
+          + New Analysis
+        </button>
+      </div>
+    </header>
+
+    <!-- 2. Application Body -->
+    <div class="app-body">
+      <!-- Collapsible Sidebar -->
+      <aside class="app-sidebar" id="app-sidebar">
+        <div class="sidebar-toggle-row">
+          <button class="btn btn-outline btn-icon btn-sm" id="sidebar-collapse-btn" title="Toggle Sidebar Collapse">
+            ◀
+          </button>
+        </div>
+
+        <nav class="sidebar-nav">
+          <!-- Home & Workspace -->
+          <span class="nav-section-title">HOME & WORKSPACE</span>
+          <a class="nav-item" data-route="home" onclick="window.router.navigate('home')" title="DocReady Home (H)">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">Home</span>
+          </a>
+
+          <!-- Analysis Group -->
+          <span class="nav-section-title">ANALYSIS</span>
+          <a class="nav-item" data-route="dashboard" onclick="window.router.navigate('dashboard')" title="Dashboard (D)">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Dashboard</span>
+          </a>
+          <a class="nav-item" data-route="new_analysis" onclick="window.router.navigate('new_analysis')" title="New Analysis (N)">
+            <span class="nav-icon">⚡</span>
+            <span class="nav-label">New Analysis</span>
+          </a>
+          <a class="nav-item" data-route="results" onclick="window.router.navigate('results')" title="Analysis Results">
+            <span class="nav-icon">📈</span>
+            <span class="nav-label">Analysis Results</span>
+          </a>
+          <a class="nav-item" data-route="findings" onclick="window.router.navigate('findings')" title="Document Findings (F)">
+            <span class="nav-icon">📋</span>
+            <span class="nav-label">Findings</span>
+          </a>
+
+          <!-- Document Inspection Group -->
+          <span class="nav-section-title">DOCUMENT INSPECTION</span>
+          <a class="nav-item" data-route="overview" onclick="window.router.navigate('overview')" title="Document Overview">
+            <span class="nav-icon">📑</span>
+            <span class="nav-label">Document Overview</span>
+          </a>
+          <a class="nav-item" data-route="viewer" onclick="window.router.navigate('viewer')" title="Page Inspection (V)">
+            <span class="nav-icon">👁️</span>
+            <span class="nav-label">Page Inspection</span>
+          </a>
+          <a class="nav-item" data-route="formatting" onclick="window.router.navigate('formatting')" title="Formatting Issues">
+            <span class="nav-icon">🎨</span>
+            <span class="nav-label">Formatting Issues</span>
+          </a>
+          <a class="nav-item" data-route="structural" onclick="window.router.navigate('structural')" title="Structural Issues">
+            <span class="nav-icon">🏗️</span>
+            <span class="nav-label">Structural Issues</span>
+          </a>
+          <a class="nav-item" data-route="content" onclick="window.router.navigate('content')" title="Content Issues">
+            <span class="nav-icon">📝</span>
+            <span class="nav-label">Content Issues</span>
+          </a>
+
+          <!-- Reporting Group -->
+          <span class="nav-section-title">REPORTING</span>
+          <a class="nav-item" data-route="reports" onclick="window.router.navigate('reports')" title="Inspection Reports">
+            <span class="nav-icon">📄</span>
+            <span class="nav-label">Reports</span>
+          </a>
+          <a class="nav-item" data-route="history" onclick="window.router.navigate('history')" title="Document History (Y)">
+            <span class="nav-icon">📁</span>
+            <span class="nav-label">Analysis History</span>
+          </a>
+
+          <!-- Configuration Group -->
+          <span class="nav-section-title">CONFIGURATION</span>
+          <a class="nav-item" data-route="standards" onclick="window.router.navigate('standards')" title="Standards & Rules">
+            <span class="nav-icon">⚖️</span>
+            <span class="nav-label">Standards & Rules</span>
+          </a>
+          <a class="nav-item" data-route="settings" onclick="window.router.navigate('settings')" title="Settings & Diagnostics">
+            <span class="nav-icon">🛠️</span>
+            <span class="nav-label">Settings</span>
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div>DocReady Verification Platform</div>
+          <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Windows x64 Offline • 10 Engines</div>
+        </div>
+      </aside>
+
+      <!-- Main Viewport Area -->
+      <main class="main-viewport">
+        <!-- Breadcrumbs Navigation Strip -->
+        <div class="breadcrumb-strip">
+          <div class="breadcrumb-trail">
+            <span style="cursor: pointer;" onclick="window.router.navigate('home')">DocReady</span>
+            <span class="breadcrumb-sep">›</span>
+            <span class="breadcrumb-current" id="breadcrumb-current-label">Home</span>
+          </div>
+
+          <div class="breadcrumb-actions" id="breadcrumb-actions-slot">
+            <!-- Contextual action buttons injected dynamically -->
+          </div>
+        </div>
+
+        <!-- Dynamic View Content Container -->
+        <div class="view-container" id="main-view-container">
+          <!-- Views mounted here -->
+        </div>
+
+        <!-- Bottom Status Bar -->
+        <footer class="app-statusbar">
+          <div class="statusbar-section">
+            <span class="legacy-alias" style="display: none;" aria-hidden="true">DocReady Platform DOCREADY</span>
+            <span>DocReady Offline Verification Platform</span>
+            <span>•</span>
+            <span id="statusbar-session-info">Ready for Verification</span>
+          </div>
+          <div class="statusbar-section">
+            <span style="font-size: 10.5px; color: var(--text-muted);">Shortcuts: [H]ome, [D]ash, [N]ew, [V]iewer, [F]indings</span>
+            <span>•</span>
+            <span id="statusbar-host">Host: 127.0.0.1:8765</span>
+          </div>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <!-- Toast Notification Root -->
+  <div id="toast-root"></div>
+
+  <!-- Vanilla JavaScript Modules (Strictly Local) -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/state.js"></script>
+  <script src="/static/js/components/toast.js"></script>
+  <script src="/static/js/components/modal.js"></script>
+  <script src="/static/js/components/document_viewer.js"></script>
+
+  <script src="/static/js/views/home.js"></script>
+  <script src="/static/js/views/dashboard.js"></script>
+  <script src="/static/js/views/new_analysis.js"></script>
+  <script src="/static/js/views/analysis_progress.js"></script>
+  <script src="/static/js/views/results.js"></script>
+  <script src="/static/js/views/viewer.js"></script>
+  <script src="/static/js/views/findings.js"></script>
+  <script src="/static/js/views/document_inspection.js"></script>
+  <script src="/static/js/views/formatting.js"></script>
+  <script src="/static/js/views/structural_issues.js"></script>
+  <script src="/static/js/views/content_issues.js"></script>
+  <script src="/static/js/views/history.js"></script>
+  <script src="/static/js/views/reports.js"></script>
+  <script src="/static/js/views/standards.js"></script>
+  <script src="/static/js/views/settings.js"></script>
+
+  <script src="/static/js/router.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
