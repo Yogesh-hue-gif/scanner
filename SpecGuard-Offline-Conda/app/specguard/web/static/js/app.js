@@ -78,6 +78,10 @@ class SpecGuardApp {
         return;
       }
 
+      if (!window.router || typeof window.router.navigate !== 'function') {
+        return;
+      }
+
       if (e.key === "d" && !e.ctrlKey && !e.metaKey) {
         window.router.navigate("dashboard");
       } else if (e.key === "n" && !e.ctrlKey && !e.metaKey) {
@@ -94,9 +98,6 @@ class SpecGuardApp {
 
   start() {
     this.initSidebar();
-    if (window.router) {
-      window.router.init("main-view-container");
-    }
     const hostSpan = document.getElementById("statusbar-host");
     if (hostSpan && window.location.host) {
       hostSpan.textContent = `Host: ${window.location.host}`;
@@ -108,6 +109,25 @@ class SpecGuardApp {
 // Global safe initializer
 window.app = new SpecGuardApp();
 
-document.addEventListener("DOMContentLoaded", () => {
-  window.app.start();
-});
+function bootSpecGuard() {
+  if (window.app && typeof window.app.start === 'function' && !window.app._started) {
+    window.app.start();
+    window.app._started = true;
+  }
+  if (window.router && typeof window.router.navigate === 'function') {
+    console.log('[SpecGuard App] Initializing default route...');
+    const initialRoute = (window.location.hash && window.location.hash.replace(/^#/, '').trim())
+      ? window.location.hash.replace(/^#/, '').trim()
+      : 'dashboard';
+    window.router.navigate(initialRoute || 'dashboard');
+  } else {
+    console.warn('[SpecGuard App] Router not ready yet, retrying in 50ms...');
+    setTimeout(bootSpecGuard, 50);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootSpecGuard);
+} else {
+  bootSpecGuard();
+}
