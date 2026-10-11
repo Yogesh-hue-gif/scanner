@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-27T15:38:22Z",
+  "timestamp": "2026-10-11T10:44:35Z",
   "domain_classifier": {
     "model": "DomainClassifierNet",
     "best_val_acc": 1.0,
@@ -110,8 +110,8 @@
         "val_acc": 1.0
       }
     ],
-    "weights_path": "/Users/meet/Desktop/scanner/models/checkpoints/domain_classifier.pt",
-    "onnx_path": "/Users/meet/Desktop/scanner/models/onnx/domain_classifier.onnx"
+    "weights_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\Doc_Ready\\models\\checkpoints\\domain_classifier.pt",
+    "onnx_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\Doc_Ready\\models\\onnx\\domain_classifier.onnx"
   },
   "logical_classifier": {
     "model": "LogicalRelationNet",
@@ -223,12 +223,12 @@
         "val_acc": 1.0
       }
     ],
-    "weights_path": "/Users/meet/Desktop/scanner/models/checkpoints/logical_classifier.pt",
-    "onnx_path": "/Users/meet/Desktop/scanner/models/onnx/logical_classifier.onnx"
+    "weights_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\Doc_Ready\\models\\checkpoints\\logical_classifier.pt",
+    "onnx_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\Doc_Ready\\models\\onnx\\logical_classifier.onnx"
   },
   "engineering_ner": {
     "model": "BiLSTMNER",
     "best_loss": 0.0,
-    "weights_path": "/Users/meet/Desktop/scanner/models/checkpoints/engineering_ner.pt"
+    "weights_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\Doc_Ready\\models\\checkpoints\\engineering_ner.pt"
   }
 }

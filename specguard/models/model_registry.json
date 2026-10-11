@@ -1,0 +1,75 @@
+{
+  "models": {
+    "domain_classifier_bilstm": {
+      "model_id": "domain_classifier_bilstm",
+      "model_name": "DomainClassifierNet",
+      "task": "domain_classification",
+      "domain": "all",
+      "version": "1.0.0",
+      "dataset_version": "v1.0",
+      "training_run_id": "RUN-01",
+      "framework": "PyTorch / ONNX",
+      "architecture": "BiLSTM Text Classifier",
+      "device": "cpu",
+      "checkpoint_path": "models/checkpoints/domain_classifier.pt",
+      "onnx_path": "models/onnx/domain_classifier.onnx",
+      "created_at": "2026-10-11T11:15:35.658749+00:00",
+      "sha256": "c1a09173c6863e9693fece75e9025d5a414a8d9059af498af8ae7057402cae89",
+      "status": "ACTIVE",
+      "metrics": {
+        "val_acc": 1.0,
+        "test_acc": 0.5
+      },
+      "parity_verified": false,
+      "parity_max_diff": null
+    },
+    "logical_classifier_siamese": {
+      "model_id": "logical_classifier_siamese",
+      "model_name": "LogicalRelationNet",
+      "task": "logical_contradiction",
+      "domain": "all",
+      "version": "1.0.0",
+      "dataset_version": "v1.0",
+      "training_run_id": "RUN-01",
+      "framework": "PyTorch / ONNX",
+      "architecture": "Siamese Dual-Encoder Net",
+      "device": "cpu",
+      "checkpoint_path": "models/checkpoints/logical_classifier.pt",
+      "onnx_path": "models/onnx/logical_classifier.onnx",
+      "created_at": "2026-10-11T11:15:35.661362+00:00",
+      "sha256": "6f9a8b4bb63e098d03ba6c2cf9983ed4ea001dc0cf7cdba6b28db079bdd5033f",
+      "status": "ACTIVE",
+      "metrics": {
+        "val_acc": 1.0,
+        "test_f1": 1.0
+      },
+      "parity_verified": false,
+      "parity_max_diff": null
+    },
+    "engineering_ner_bilstm": {
+      "model_id": "engineering_ner_bilstm",
+      "model_name": "EngineeringNERNet",
+      "task": "named_entity_recognition",
+      "domain": "all",
+      "version": "1.0.0",
+      "dataset_version": "v1.0",
+      "training_run_id": "RUN-01",
+      "framework": "PyTorch",
+      "architecture": "BiLSTM Token Sequence Tagger",
+      "device": "cpu",
+      "checkpoint_path": "models/checkpoints/engineering_ner.pt",
+      "onnx_path": null,
+      "created_at": "2026-10-11T11:15:35.673940+00:00",
+      "sha256": "fca90f8a497a5176720b77340489fd8d6bf53f21457ffa5812605abbcf5fabd5",
+      "status": "ACTIVE",
+      "metrics": {
+        "train_loss": 0.0,
+        "test_token_acc": 1.0
+      },
+      "parity_verified": false,
+      "parity_max_diff": null
+    }
+  },
+  "version": "1.0.0",
+  "last_updated": "2026-10-11T11:15:35.682382+00:00"
+}

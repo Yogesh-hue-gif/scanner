@@ -181,7 +181,7 @@ window.SettingsView = {
       document.getElementById("storage-docs-count").textContent = `${s.repository.documents_count} files (${s.repository.documents_size_mb} MB)`;
       document.getElementById("storage-reports-count").textContent = `${s.reports.count} generated (${s.reports.size_mb} MB)`;
     } catch (err) {
-      console.warn("Storage telemetry error:", err);
+      console.warn("Storage diagnostics error:", err);
     }
   },
 

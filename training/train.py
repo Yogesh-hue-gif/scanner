@@ -180,6 +180,10 @@ def train_domain_classifier(
         model.load_state_dict(best_weights or model.state_dict())
         model.eval()
         dummy_in = torch.zeros((1, 64), dtype=torch.long)
+        export_kwargs = {"opset_version": 14}
+        import inspect
+        if "dynamo" in inspect.signature(torch.onnx.export).parameters:
+            export_kwargs["dynamo"] = False
         torch.onnx.export(
             model,
             dummy_in,
@@ -187,7 +191,7 @@ def train_domain_classifier(
             input_names=["input_ids"],
             output_names=["logits"],
             dynamic_axes={"input_ids": {0: "batch_size"}, "logits": {0: "batch_size"}},
-            opset_version=14
+            **export_kwargs
         )
         logger.info("Exported Domain Classifier ONNX graph to %s", onnx_path)
     except Exception as e:
@@ -303,6 +307,10 @@ def train_logical_classifier(
         model.eval()
         d_a = torch.zeros((1, 48), dtype=torch.long)
         d_b = torch.zeros((1, 48), dtype=torch.long)
+        export_kwargs = {"opset_version": 14}
+        import inspect
+        if "dynamo" in inspect.signature(torch.onnx.export).parameters:
+            export_kwargs["dynamo"] = False
         torch.onnx.export(
             model,
             (d_a, d_b),
@@ -310,7 +318,7 @@ def train_logical_classifier(
             input_names=["statement_a", "statement_b"],
             output_names=["logits"],
             dynamic_axes={"statement_a": {0: "batch_size"}, "statement_b": {0: "batch_size"}},
-            opset_version=14
+            **export_kwargs
         )
         logger.info("Exported Logical Classifier ONNX graph to %s", onnx_path)
     except Exception as e:

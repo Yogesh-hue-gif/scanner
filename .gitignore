@@ -19,7 +19,6 @@ data/
 logs/
 /repository/
 /datasets/
-models/
 *.db
 *.sqlite3
 reports/
