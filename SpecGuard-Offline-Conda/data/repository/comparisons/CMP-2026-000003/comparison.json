@@ -1,0 +1,36 @@
+{
+  "comparison_id": "CMP-2026-000003",
+  "document_id": "DOC-2026-000003",
+  "document_filename": "45756879_Engineering  Technical Document Quality Test Suite.pdf",
+  "document_sha256": "81fe9e362ba9745730785ea35b92894ec400d1f95f074b00d40ab58d0e61387f",
+  "domain": "Academic",
+  "status": "COMPLETED",
+  "analysis_started_at": "2026-10-04T19:43:38.128828+00:00",
+  "analysis_completed_at": "2026-10-04T19:43:38.926404+00:00",
+  "duration_ms": 797,
+  "model_version": "Deterministic-v1.0",
+  "standards_used": [],
+  "total_findings": 20,
+  "critical_count": 0,
+  "high_count": 3,
+  "medium_count": 2,
+  "low_count": 15,
+  "info_count": 0,
+  "annotated_pdf_path": null,
+  "annotated_docx_path": null,
+  "report_html_path": null,
+  "findings_json_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\scanner\\scanner\\SpecGuard-Offline-Conda\\data\\repository\\comparisons\\CMP-2026-000003\\findings.json",
+  "artifact_hashes": {
+    "findings_json": "ed44966c9a32904c0b3bd7d2e2ff9f602170b1aa90cb9161c220ece5bff5b7d9"
+  },
+  "model_id": "SG-DEFAULT",
+  "dataset_version": "v1.0",
+  "standards_version": "v1.0",
+  "rule_set_version": "v1.0",
+  "pipeline_version": "v1.0",
+  "application_version": "1.0.0",
+  "inference_configuration": {
+    "domain": "Academic",
+    "selected_standards": []
+  }
+}

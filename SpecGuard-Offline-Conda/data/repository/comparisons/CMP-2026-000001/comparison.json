@@ -1,0 +1,36 @@
+{
+  "comparison_id": "CMP-2026-000001",
+  "document_id": "DOC-2026-000001",
+  "document_filename": "6d1880d4_SHA256SUMS.txt",
+  "document_sha256": "b7751e2bf73eb2b421ee4abc4a63f1363ba4bde3cb9861823bbc972fb139b2a9",
+  "domain": "Mechanical",
+  "status": "COMPLETED",
+  "analysis_started_at": "2026-10-04T17:37:14.135346+00:00",
+  "analysis_completed_at": "2026-10-04T17:37:14.336916+00:00",
+  "duration_ms": 201,
+  "model_version": "Deterministic-v1.0",
+  "standards_used": [],
+  "total_findings": 11,
+  "critical_count": 1,
+  "high_count": 10,
+  "medium_count": 0,
+  "low_count": 0,
+  "info_count": 0,
+  "annotated_pdf_path": null,
+  "annotated_docx_path": null,
+  "report_html_path": null,
+  "findings_json_path": "C:\\Users\\yoges\\OneDrive\\Desktop\\scanner\\scanner\\SpecGuard-Offline-Conda\\data\\repository\\comparisons\\CMP-2026-000001\\findings.json",
+  "artifact_hashes": {
+    "findings_json": "4c3ee6da8592b1eea73b0b67e84c67a5c401c5cbea95e2e47b32b69d0a6982b3"
+  },
+  "model_id": "SG-DEFAULT",
+  "dataset_version": "v1.0",
+  "standards_version": "v1.0",
+  "rule_set_version": "v1.0",
+  "pipeline_version": "v1.0",
+  "application_version": "1.0.0",
+  "inference_configuration": {
+    "domain": "Mechanical",
+    "selected_standards": []
+  }
+}

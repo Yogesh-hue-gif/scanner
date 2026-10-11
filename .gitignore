@@ -1,77 +1,15 @@
-# ==============================================================================
-# SpecGuard — Production Git Ignore Policy
-# ==============================================================================
-
-# Python Caches & Byte-code
-__pycache__/
-*.py[cod]
-*$py.class
-*.pyd
-
-# Testing & Coverage
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-coverage.xml
-htmlcov/
-
-# Local Python Environments (excluding portable packaged environment)
-.venv/
-venv/
-env/
-ENV/
-
-# Build & Packaging Artifacts (Large Archives & Staging Folders)
-build/
-dist/
-*.egg-info/
 *.zip
-*.tar
+*.pdf
 *.tar.gz
-*.pdb
-SpecGuard-Offline-Conda/
-# Mutable Runtime User Data (local databases, uploaded files, runtime logs)
-data/*.db
-data/*.sqlite3
-data/database/*
-data/uploads/*
-data/reports/*
-data/logs/*
-data/repository/*
-!data/database/.gitkeep
-!data/uploads/.gitkeep
-!data/reports/.gitkeep
-!data/logs/.gitkeep
-!data/repository/.gitkeep
-
-# SpecGuard Unpacked Portable Environment (extracted at runtime by launcher)
-SpecGuard-Offline-Conda/environment/specguard/
-SpecGuard-Offline-Conda/data/database/*
-SpecGuard-Offline-Conda/data/uploads/*
-SpecGuard-Offline-Conda/data/reports/*
-SpecGuard-Offline-Conda/data/logs/*
-!SpecGuard-Offline-Conda/data/database/.gitkeep
-!SpecGuard-Offline-Conda/data/uploads/.gitkeep
-!SpecGuard-Offline-Conda/data/reports/.gitkeep
-!SpecGuard-Offline-Conda/data/logs/.gitkeep
-!SpecGuard-Offline-Conda/data/repository/.gitkeep
-
-# Temporary & Editor Files
-*.tmp
-*.bak
-*.old
-*.orig
-*.rej
-*.swp
-*~
-
-# macOS Finder / archive metadata — never commit, never pack (caused win-64 bloat)
-__MACOSX/
-*.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-Thumbs.db
-ehthumbs.db
+*.exe
+*.7z
+.conda/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.db-shm
+*.db-wal
+**/environment/
+**/runtime/
