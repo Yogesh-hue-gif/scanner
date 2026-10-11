@@ -90,13 +90,16 @@ class Router {
       return;
     }
 
-    // If target route depends on an active session, preserve session_id
+    // If target route depends on an active session, preserve session_id ONLY if not actively analyzing
     if (this.RESULT_DEPENDENT_ROUTES.includes(targetRoute)) {
       if (!mergedParams.session_id) {
-        const activeSid = (window.appState && window.appState.get("activeSessionId")) ||
-                          localStorage.getItem("specguard-active-session");
-        if (activeSid) {
-          mergedParams.session_id = activeSid;
+        const isJobRunning = window.appState && (window.appState.get("activeJobId") || window.appState.get("analysisStatus") === "ANALYZING");
+        if (!isJobRunning) {
+          const activeSid = (window.appState && window.appState.get("activeSessionId")) ||
+                            localStorage.getItem("specguard-active-session");
+          if (activeSid) {
+            mergedParams.session_id = activeSid;
+          }
         }
       }
     }

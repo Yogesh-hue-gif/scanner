@@ -510,8 +510,8 @@ class ReportGenerator:
 <body>
 <div class="report-card">
     <div class="report-header">
-        <div class="brand-title">SPECGuard</div>
-        <div class="brand-sub">ENGINEERING DOCUMENT QUALITY & COMPLIANCE INSPECTION</div>
+        <div class="brand-title">DocReady</div>
+        <div class="brand-sub">OFFLINE ENGINEERING DOCUMENT READINESS & COMPLIANCE VERIFICATION</div>
         <div class="report-type-badge">DOCUMENT INSPECTION REPORT</div>
     </div>
 
@@ -614,7 +614,7 @@ class ReportGenerator:
         Tolerance Index of <strong>{res.tolerance_index}</strong> against a configured maximum acceptable
         tolerance of <strong>{res.maximum_acceptable_tolerance}</strong> under the <em>{res.inspection_profile}</em> profile.
         <br><br>
-        Detailed Findings and Suggested Corrective Actions are available in the SpecGuard
+        Detailed Findings and Suggested Corrective Actions are available in the DocReady
         Inspection Findings interface using Session ID: <strong style="font-family: monospace; color: #38bdf8;">{res.session_id}</strong>.
     </div>
 
@@ -622,7 +622,7 @@ class ReportGenerator:
     <div class="disclaimer-footer">
         {res.human_disclaimer}
         <br><br>
-        SpecGuard &mdash; Engineering Document Quality & Compliance Inspection &bull; Session ID: {res.session_id}
+        DocReady &mdash; Offline Engineering Document Readiness Verification &bull; Session ID: {res.session_id}
     </div>
 </div>
 </body>

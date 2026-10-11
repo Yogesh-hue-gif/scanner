@@ -149,7 +149,9 @@ class RepositoryManager:
     def register_document(self, doc_model: DocumentModel, store_bytes: bool = True) -> RepositoryDocument:
         """Registers a document into the repository, detecting revisions of existing documents."""
         src_path = Path(doc_model.file_path).resolve()
-        filename = src_path.name
+        raw_name = (getattr(doc_model, "metadata", None) or {}).get("original_filename") or src_path.name
+        import re
+        filename = re.sub(r"^[0-9a-fA-F]{8}_", "", raw_name)
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -157,11 +159,20 @@ class RepositoryManager:
             cursor.execute("SELECT * FROM repo_documents WHERE sha256 = ?", (doc_model.file_hash,))
             existing = cursor.fetchone()
             if existing:
+                existing_fn = existing["filename"]
+                # Update filename if existing had a uuid prefix or if a new clean filename was provided
+                if re.match(r"^[0-9a-fA-F]{8}_", existing_fn) or (filename and filename != existing_fn and not re.match(r"^[0-9a-fA-F]{8}_", filename)):
+                    cursor.execute("UPDATE repo_documents SET filename = ? WHERE document_id = ?", (filename, existing["document_id"]))
+                    conn.commit()
+                    existing_fn = filename
+                else:
+                    existing_fn = re.sub(r"^[0-9a-fA-F]{8}_", "", existing_fn)
+
                 return RepositoryDocument(
                     document_id=existing["document_id"],
                     family_id=existing["family_id"],
                     revision_number=existing["revision_number"],
-                    filename=existing["filename"],
+                    filename=existing_fn,
                     original_path=existing["original_path"],
                     file_type=existing["file_type"],
                     file_size=existing["file_size"],

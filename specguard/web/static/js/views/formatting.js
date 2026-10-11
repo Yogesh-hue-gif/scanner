@@ -9,6 +9,36 @@ window.FormattingView = {
   activeTab: "all",
 
   async render(container) {
+    const activeJobId = window.appState.get("activeJobId");
+    if (activeJobId) {
+      try {
+        const job = await window.api.analysis.getJob(activeJobId);
+        if (job && (job.status === "running" || job.status === "processing" || job.status === "queued")) {
+          container.innerHTML = `
+            <div class="empty-state" style="padding: 60px 20px;">
+              <div class="status-indicator-pill" style="margin: 0 auto 16px;">
+                <span class="status-dot"></span>
+                <span>ANALYSIS IN PROGRESS</span>
+              </div>
+              <div style="font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">
+                Formatting Inspection Pending Verification
+              </div>
+              <div style="font-size: 13.5px; color: var(--text-muted); margin-bottom: 6px;">
+                Scanning: <strong style="color: var(--text-secondary);">${job.filename || "Engineering Document"}</strong>
+              </div>
+              <div style="font-size: 13px; color: var(--accent-primary); font-weight: 700; margin-bottom: 24px;">
+                ${job.stage || "Analyzing..."} (${job.percent || 0}%)
+              </div>
+              <button class="btn btn-primary" onclick="window.router.navigate('progress')">
+                View Live Progress Tracker →
+              </button>
+            </div>
+          `;
+          return;
+        }
+      } catch (_) {}
+    }
+
     container.innerHTML = `
       <div class="empty-state" style="padding: 60px 20px;">
         <div class="spinner" style="margin: 0 auto 16px;"></div>

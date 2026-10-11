@@ -252,6 +252,11 @@ window.NewAnalysisView = {
       const startBtn = document.getElementById("btn-start-analysis");
       startBtn.disabled = true;
       startBtn.textContent = "Launching Pipeline...";
+
+      // Clear any previous active session so stale findings or old document state
+      // are never displayed while the new document is being scanned
+      window.appState.clearActiveSession();
+
       window.appState.set("documentLifecycle", "ANALYZING");
 
       const res = await window.api.analysis.start({
@@ -265,6 +270,11 @@ window.NewAnalysisView = {
       window.appState.set("activeDocument", this.selectedFile);
       window.appState.set("activeDomain", this.selectedDomain);
       window.appState.set("analysisStatus", "ANALYZING");
+
+      const statusBar = document.getElementById("statusbar-session-info");
+      if (statusBar) {
+        statusBar.textContent = `Scanning: ${this.selectedFile.filename} (${this.selectedDomain})`;
+      }
 
       window.toast.info("Analysis pipeline launched.");
       window.router.navigate("progress");

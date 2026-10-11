@@ -122,7 +122,7 @@ class ToleranceResult:
     inspection_profile: str
     inspection_date: str
     pages_inspected: int
-    engine_version: str = "SpecGuard 1.0.0"
+    engine_version: str = "DocReady 1.0.0"
 
     raw_tolerance: float = 0.0
     normalization_factor: float = 1.0

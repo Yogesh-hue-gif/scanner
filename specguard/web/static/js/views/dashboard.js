@@ -18,8 +18,7 @@ window.DashboardView = {
     if (activeJobId) {
       try {
         const job = await window.api.analysis.getJob(activeJobId);
-        if (job) {
-          if (job.status === "processing" || job.status === "running") {
+          if (job.status === "processing" || job.status === "running" || job.status === "queued") {
             this.renderAnalyzing(container, job, window.appState.get("activeDocument"), window.appState.get("activeDomain"));
             return;
           } else if (job.status === "failed") {
@@ -141,6 +140,122 @@ window.DashboardView = {
       domain: domain || (activeDoc && activeDoc.domain) || "Engineering",
       recentComparisons
     });
+  },
+
+  /**
+   * STATE 2 - ANALYZING: Renders live progress card when analysis is underway.
+   */
+  renderAnalyzing(container, job, activeDoc, domain) {
+    if (this._dashPollTimer) {
+      clearInterval(this._dashPollTimer);
+      this._dashPollTimer = null;
+    }
+
+    const docName = (activeDoc && activeDoc.filename) || job.filename || "Engineering Document";
+    const pct = Number(job.percent) || 0;
+    const stage = job.stage || "Analyzing specification document...";
+
+    container.innerHTML = `
+      <div style="max-width: 900px; margin: 36px auto; display: flex; flex-direction: column; gap: 20px;">
+        <div class="card" style="border-left: 4px solid var(--accent-primary); padding: 28px 32px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                <span class="status-dot"></span>
+                <span style="font-weight: 800; font-size: 13px; color: var(--accent-primary); letter-spacing: 0.5px;">ANALYSIS IN PROGRESS</span>
+              </div>
+              <h2 style="font-size: 20px; font-weight: 800; color: var(--text-primary); margin: 0 0 6px 0;" id="dash-analyzing-docname">
+                ${escapeHtml(docName)}
+              </h2>
+              <div style="font-size: 13px; color: var(--text-muted);">
+                Domain: <strong style="text-transform: capitalize; color: var(--text-secondary);">${escapeHtml(domain || job.domain || "Mechanical")}</strong>
+                • Job: <code style="font-size: 11px;">${escapeHtml(job.job_id)}</code>
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="window.router.navigate('progress')">
+              View Detailed Progress →
+            </button>
+          </div>
+
+          <div style="margin-top: 24px;">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 8px;">
+              <span style="color: var(--text-secondary);" id="dash-analyzing-stage">${escapeHtml(stage)}</span>
+              <span style="color: var(--accent-primary);" id="dash-analyzing-pct">${pct}%</span>
+            </div>
+            <div class="progress-bar-container" style="height: 10px; background: var(--bg-surface-sunken); border-radius: var(--radius-sm); overflow: hidden;">
+              <div id="dash-analyzing-bar" style="height: 100%; width: ${Math.max(5, pct)}%; background: var(--accent-primary); transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this._dashPollTimer = setInterval(async () => {
+      try {
+        const updatedJob = await window.api.analysis.getJob(job.job_id);
+        if (!updatedJob) return;
+
+        if (updatedJob.status === "completed" || updatedJob.status === "failed") {
+          clearInterval(this._dashPollTimer);
+          this._dashPollTimer = null;
+          if (updatedJob.status === "completed" && updatedJob.session_id) {
+            window.appState.set("activeSessionId", updatedJob.session_id);
+            window.appState.set("activeJobId", null);
+          }
+          window.router.navigate("dashboard");
+          return;
+        }
+
+        const stageEl = document.getElementById("dash-analyzing-stage");
+        const pctEl = document.getElementById("dash-analyzing-pct");
+        const barEl = document.getElementById("dash-analyzing-bar");
+        const docEl = document.getElementById("dash-analyzing-docname");
+
+        if (stageEl) stageEl.textContent = updatedJob.stage || "Analyzing...";
+        if (pctEl) pctEl.textContent = `${updatedJob.percent || 0}%`;
+        if (barEl) barEl.style.width = `${Math.max(5, updatedJob.percent || 0)}%`;
+        if (docEl && updatedJob.filename) docEl.textContent = updatedJob.filename;
+
+        const statusBar = document.getElementById("statusbar-session-info");
+        if (statusBar) {
+          statusBar.textContent = `Analyzing: ${updatedJob.percent || 0}% - ${updatedJob.stage || ""}`;
+        }
+      } catch (_) {
+        clearInterval(this._dashPollTimer);
+        this._dashPollTimer = null;
+      }
+    }, 400);
+  },
+
+  /**
+   * STATE 4 - FAILED: Renders failure card when analysis pipeline errors out.
+   */
+  renderFailed(container, job, activeDoc) {
+    const docName = (activeDoc && activeDoc.filename) || (job && job.filename) || "Engineering Document";
+    const err = (job && job.error) || "An unexpected error occurred during document analysis.";
+
+    container.innerHTML = `
+      <div style="max-width: 760px; margin: 48px auto; padding: 36px; background: var(--bg-surface); border: 1px solid var(--accent-critical); border-radius: var(--radius-lg); text-align: center; box-shadow: var(--shadow-md);">
+        <div style="font-size: 44px; margin-bottom: 16px;">❌</div>
+        <h2 style="font-size: 22px; font-weight: 700; color: var(--accent-critical); margin-bottom: 10px;">
+          Verification Pipeline Failed
+        </h2>
+        <p style="color: var(--text-primary); font-weight: 600; font-size: 15px; margin-bottom: 8px;">
+          ${escapeHtml(docName)}
+        </p>
+        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; line-height: 1.6; max-width: 600px; margin-left: auto; margin-right: auto;">
+          ${escapeHtml(err)}
+        </p>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+          <button class="btn btn-primary" onclick="window.appState.set('activeJobId', null); window.router.navigate('new_analysis');">
+            + Start New Analysis
+          </button>
+          <button class="btn btn-secondary" onclick="window.appState.set('activeJobId', null); window.router.navigate('history');">
+            Browse Analysis History
+          </button>
+        </div>
+      </div>
+    `;
   },
 
   /**

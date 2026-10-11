@@ -57,12 +57,32 @@ class DocumentParser:
                 deep_analysis=deep_analysis
             )
         elif ext == ".docx":
+            if progress_callback:
+                try:
+                    progress_callback(1, 1, "Parsing Word document XML structure...")
+                except Exception:
+                    pass
             return DocxExtractor.extract(path, file_hash, file_size)
         elif ext in [".xlsx", ".xls"]:
+            if progress_callback:
+                try:
+                    progress_callback(1, 1, "Parsing Excel spreadsheets & tabular ranges...")
+                except Exception:
+                    pass
             return DocumentParser._parse_xlsx(path, file_hash, file_size)
         elif ext == ".txt":
+            if progress_callback:
+                try:
+                    progress_callback(1, 1, "Reading plain text specification...")
+                except Exception:
+                    pass
             return DocumentParser._parse_txt(path, file_hash, file_size)
         elif ext in [".png", ".jpg", ".jpeg", ".tiff", ".tif"]:
+            if progress_callback:
+                try:
+                    progress_callback(1, 1, "Preprocessing image & computer vision layout...")
+                except Exception:
+                    pass
             return DocumentParser._parse_image(path, file_hash, file_size)
         else:
             raise ValueError(f"Unsupported document format: {ext}")

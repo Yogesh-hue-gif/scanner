@@ -105,10 +105,10 @@ class AnalysisPipeline:
             logger.info("[%3d%%] %s", pct, stage)
 
         # 1. Document Acquisition & Parsing
-        report("Acquiring and parsing document...", 5)
+        report("Acquiring and reading document...", 5)
         def parse_progress(cur, tot, msg):
             pct = 5 + int((cur / max(1, tot)) * 15)
-            report(f"Parsing page {cur}/{tot}...", pct)
+            report(f"Extracting page {cur}/{tot}...", min(20, pct))
 
         doc = DocumentParser.parse_file(
             file_path,
@@ -131,7 +131,7 @@ class AnalysisPipeline:
         }
 
         # 2. Document Layout & Formatting Analysis
-        report("Executing formatting analysis...", 22)
+        report("Analyzing formatting & typography...", 26)
         try:
             all_findings.extend(self.formatting_analyzer.analyze(doc, context))
         except Exception as e:
@@ -139,7 +139,7 @@ class AnalysisPipeline:
         check_cancellation()
 
         # 3. Structure & Outline Hierarchy Analysis
-        report("Analyzing structural outline & section hierarchy...", 28)
+        report("Checking headings & outline hierarchy...", 32)
         try:
             all_findings.extend(self.structure_analyzer.analyze(doc, context))
         except Exception as e:
@@ -147,7 +147,7 @@ class AnalysisPipeline:
         check_cancellation()
 
         # 4. Table of Contents Cross-Validation
-        report("Cross-checking Table of Contents...", 35)
+        report("Checking Table of Contents (TOC)...", 38)
         try:
             all_findings.extend(self.toc_analyzer.analyze(doc, context))
         except Exception as e:
@@ -155,7 +155,7 @@ class AnalysisPipeline:
         check_cancellation()
 
         # 5. Tables Inspection & Continuity
-        report("Analyzing tabular data and cell synchronicity...", 42)
+        report("Checking tables & data continuity...", 46)
         try:
             all_findings.extend(self.table_analyzer.analyze(doc, context))
         except Exception as e:
@@ -163,7 +163,7 @@ class AnalysisPipeline:
         check_cancellation()
 
         # 6. Figures & Diagrams Validation
-        report("Analyzing figures, charts, and diagrams...", 50)
+        report("Checking figures & engineering drawings...", 54)
         try:
             all_findings.extend(self.figure_analyzer.analyze(doc, context))
         except Exception as e:
@@ -171,7 +171,7 @@ class AnalysisPipeline:
         check_cancellation()
 
         # 7. Mathematical Equations Inspection
-        report("Inspecting mathematical equations & labels...", 56)
+        report("Checking mathematical equations & formulas...", 60)
         try:
             all_findings.extend(self.equation_analyzer.analyze(doc, context))
         except Exception as e:
@@ -179,7 +179,7 @@ class AnalysisPipeline:
         check_cancellation()
 
         # 8. Document-Wide Citation & Cross-Reference Resolution
-        report("Resolving document-wide citation & cross-reference graph...", 64)
+        report("Resolving references & citations graph...", 66)
         try:
             all_findings.extend(self.cross_ref_analyzer.analyze(doc, context))
         except Exception as e:
@@ -187,7 +187,7 @@ class AnalysisPipeline:
         check_cancellation()
 
         # 9. Technical Grammar & Terminology Whitelist
-        report("Evaluating grammar, syntax & technical vocabulary...", 70)
+        report("Evaluating grammar, syntax & technical vocabulary...", 72)
         try:
             all_findings.extend(self.grammar_analyzer.analyze(doc, context))
         except Exception as e:
@@ -195,7 +195,7 @@ class AnalysisPipeline:
         check_cancellation()
 
         # 10. Engineering Parameter Extraction & Normalization
-        report("Extracting domain-specific engineering parameters...", 76)
+        report("Checking domain engineering parameters & rules...", 78)
         try:
             eng_findings = self.engineering_analyzer.analyze(doc, context)
             all_findings.extend(eng_findings)
@@ -205,7 +205,7 @@ class AnalysisPipeline:
         check_cancellation()
 
         # 11. Template Validation (if applicable)
-        report("Validating fixed engineering template...", 80)
+        report("Validating engineering templates & specifications...", 84)
         try:
             all_findings.extend(self.template_analyzer.analyze(doc, context))
         except Exception as e:
@@ -214,7 +214,7 @@ class AnalysisPipeline:
 
         # 12. IEEE Research Paper Compliance (if IEEE profile)
         if profile_config.profile_id == "ieee_research":
-            report("Validating IEEE research paper formatting & style...", 84)
+            report("Validating IEEE research paper formatting & style...", 86)
             try:
                 all_findings.extend(self.ieee_analyzer.analyze(doc, context))
             except Exception as e:
@@ -223,7 +223,7 @@ class AnalysisPipeline:
 
         # 13. Custom Template Compliance & Drift (if custom profile)
         if profile_config.custom_rules.get("custom_template_id"):
-            report("Evaluating custom template compliance & drift...", 86)
+            report("Evaluating custom template compliance & drift...", 88)
             try:
                 all_findings.extend(self.custom_template_analyzer.analyze(doc, profile_config))
             except Exception as e:
@@ -231,7 +231,7 @@ class AnalysisPipeline:
             check_cancellation()
 
         # 14. Semantic Propositions & Logical Consistency
-        report("Detecting semantic propositions & cross-document contradictions...", 88)
+        report("Detecting logical propositions & contradictions...", 90)
         try:
             all_findings.extend(self.semantic_analyzer.analyze(doc, context))
         except Exception as e:
@@ -243,16 +243,16 @@ class AnalysisPipeline:
             logger.error("LogicalAnalyzer failed: %s", e)
         check_cancellation()
 
-        # 14. Local Standards Knowledge Base Evaluation
-        report("Comparing parameters against local engineering standards...", 93)
+        # 15. Local Standards Knowledge Base Evaluation
+        report("Evaluating local standards knowledge base...", 94)
         try:
             all_findings.extend(self.standards_analyzer.analyze(doc, context))
         except Exception as e:
             logger.error("StandardsAnalyzer failed: %s", e)
         check_cancellation()
 
-        # 15. Severity Prioritization & Ranking
-        report("Computing severity scores and ranking critical issues...", 98)
+        # 16. Severity Prioritization & Ranking
+        report("Calculating severity scores & compiling findings...", 98)
         ranked_findings = self.severity_engine.rank_findings(all_findings)
 
         duration_ms = max(1, int((time.time() - start_time) * 1000))

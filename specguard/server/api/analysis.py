@@ -68,6 +68,14 @@ def sanitize_filename(filename: str) -> str:
     return clean or "document"
 
 
+def extract_clean_filename(file_path: str) -> str:
+    """Extracts clean display filename by removing internal UUID prefixes."""
+    import re
+    raw_name = Path(file_path).name
+    clean = re.sub(r"^[0-9a-fA-F]{8}_", "", raw_name)
+    return clean or raw_name
+
+
 def validate_file_signature(path: Path, ext: str) -> None:
     """Validates real file magic bytes against extension to prevent disguise attacks."""
     with open(path, "rb") as f:
@@ -237,7 +245,7 @@ def _run_pipeline_worker(
                     "total_findings": len(findings),
                     "doc_hash": doc.file_hash,
                     "page_count": doc.page_count,
-                    "filename": Path(doc.file_path).name,
+                    "filename": extract_clean_filename(doc.file_path),
                     "file_path": doc.file_path,
                     "domain": domain,
                     "profile": profile or domain
@@ -293,7 +301,7 @@ def start_analysis(req: AnalysisRequest, bg_tasks: BackgroundTasks) -> Dict[str,
             "stage": "Queued for processing...",
             "percent": 0,
             "file_path": file_path,
-            "filename": Path(file_path).name,
+            "filename": extract_clean_filename(file_path),
             "domain": req.domain.lower(),
             "profile": req.profile or req.domain.lower(),
             "selected_standards": req.selected_standards,

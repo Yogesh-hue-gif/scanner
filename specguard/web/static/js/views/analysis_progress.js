@@ -6,25 +6,25 @@
 
 window.AnalysisProgressView = {
   pollInterval: null,
+  eventSource: null,
 
   stagesList: [
-    { name: "Uploading document", threshold: 4 },
-    { name: "Reading document", threshold: 8 },
-    { name: "Extracting text", threshold: 14 },
+    { name: "Acquiring & reading document", threshold: 5 },
+    { name: "Extracting text & page layout", threshold: 12 },
     { name: "Detecting document structure", threshold: 20 },
-    { name: "Analyzing formatting", threshold: 28 },
-    { name: "Checking headings", threshold: 34 },
-    { name: "Checking TOC", threshold: 40 },
-    { name: "Checking figures", threshold: 48 },
-    { name: "Checking tables", threshold: 54 },
-    { name: "Checking equations", threshold: 60 },
-    { name: "Checking references", threshold: 66 },
-    { name: "Checking grammar and terminology", threshold: 72 },
-    { name: "Checking engineering rules", threshold: 78 },
-    { name: "Checking standards", threshold: 84 },
-    { name: "Detecting logical inconsistencies", threshold: 90 },
-    { name: "Calculating severity", threshold: 94 },
-    { name: "Generating findings", threshold: 98 },
+    { name: "Analyzing formatting & typography", threshold: 26 },
+    { name: "Checking headings & outline hierarchy", threshold: 32 },
+    { name: "Checking Table of Contents (TOC)", threshold: 38 },
+    { name: "Checking tables & data continuity", threshold: 46 },
+    { name: "Checking figures & engineering drawings", threshold: 54 },
+    { name: "Checking mathematical equations", threshold: 60 },
+    { name: "Checking references & citations", threshold: 66 },
+    { name: "Checking grammar & terminology", threshold: 72 },
+    { name: "Checking engineering rules & parameters", threshold: 78 },
+    { name: "Checking templates & specifications", threshold: 84 },
+    { name: "Detecting logical contradictions", threshold: 90 },
+    { name: "Evaluating local standards", threshold: 94 },
+    { name: "Calculating severity & compiling findings", threshold: 98 },
     { name: "Analysis complete", threshold: 100 }
   ],
 
@@ -71,7 +71,7 @@ window.AnalysisProgressView = {
         <div class="stage-tracker-card">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 13px; font-weight: 700; color: var(--text-secondary);" id="ws-stage-label">
-              Initializing analysis engines...
+              Initializing DocReady analysis engines...
             </span>
             <span style="font-size: 18px; font-weight: 800; color: var(--accent-primary);" id="ws-pct-label">
               0%
@@ -83,7 +83,7 @@ window.AnalysisProgressView = {
             <div class="progress-bar-fill" id="ws-progress-fill" style="width: 5%;"></div>
           </div>
 
-          <!-- Detailed 18 Stages List -->
+          <!-- Detailed Stages List -->
           <div class="stage-list" id="ws-stage-list">
             ${this.stagesList.map((s, idx) => `
               <div class="stage-item pending" id="ws-stage-${idx}">
@@ -102,7 +102,7 @@ window.AnalysisProgressView = {
           </div>
           <div class="card-body">
             <div class="live-log-box" id="ws-log-box">
-              <div>[0.00s] Initializing SpecGuard offline analysis coordinator...</div>
+              <div>[0.00s] Initializing DocReady offline analysis coordinator...</div>
             </div>
           </div>
         </div>
@@ -127,11 +127,18 @@ window.AnalysisProgressView = {
       const stageEl = document.getElementById("ws-stage-label");
       const fillEl = document.getElementById("ws-progress-fill");
       const statusText = document.getElementById("ws-status-text");
+      const docNameEl = document.getElementById("ws-doc-name");
 
       if (pctEl) pctEl.textContent = `${pct}%`;
       if (stageEl) stageEl.textContent = stage;
       if (fillEl) fillEl.style.width = `${Math.max(5, pct)}%`;
       if (statusText) statusText.textContent = status;
+      if (docNameEl && job.filename) docNameEl.textContent = job.filename;
+
+      const statusBarSession = document.getElementById("statusbar-session-info");
+      if (statusBarSession) {
+        statusBarSession.textContent = `Analyzing: ${pct}% - ${stage}`;
+      }
 
       // Update stage indicators
       this.stagesList.forEach((s, idx) => {
@@ -164,18 +171,38 @@ window.AnalysisProgressView = {
         this.stopTracking();
         window.toast.success(`Analysis complete! Recorded ${job.total_findings || 0} findings.`);
 
+        const statusBar = document.getElementById("statusbar-session-info");
+        if (statusBar && job.session_id) {
+          statusBar.textContent = `Session: ${job.session_id} • ${job.total_findings || 0} Findings`;
+        }
+
         setTimeout(async () => {
           if (job.session_id) {
             window.appState.set("activeSessionId", job.session_id);
+            window.appState.set("activeJobId", null);
+            window.appState.set("analysisStatus", "ANALYSIS_COMPLETE");
+            window.appState.set("documentLifecycle", "COMPLETED");
+
+            if (job.doc_hash || job.filename) {
+              window.appState.set("activeDocument", {
+                filename: job.filename,
+                file_hash: job.doc_hash,
+                page_count: job.page_count || 1,
+                file_path: job.file_path,
+                domain: job.domain,
+                profile: job.profile
+              });
+            }
+
             try {
-              const res = await window.api.findings.list({ session_id: job.session_id, limit: 300 });
+              const res = await window.api.findings.list({ session_id: job.session_id, limit: 500 });
               window.appState.set("activeFindings", res.findings || []);
             } catch (e) {
               console.error("Error preloading findings:", e);
             }
           }
-          window.router.navigate("results");
-        }, 600);
+          window.router.navigate("results", { session_id: job.session_id });
+        }, 400);
       } else if (job.status === "failed") {
         this.stopTracking();
         window.toast.error(`Analysis failed: ${job.error || "Unknown error"}`);
@@ -183,10 +210,14 @@ window.AnalysisProgressView = {
           statusText.textContent = "FAILED";
           statusText.style.color = "var(--sev-critical)";
         }
+        const statusBar = document.getElementById("statusbar-session-info");
+        if (statusBar) {
+          statusBar.textContent = `Analysis Failed: ${job.error || "Unknown error"}`;
+        }
       }
     };
 
-    // Polling fallback every 350ms
+    // Fast polling fallback every 250ms for reliable local loopback communication
     this.pollInterval = setInterval(async () => {
       try {
         const job = await window.api.analysis.getJob(jobId);
@@ -194,13 +225,20 @@ window.AnalysisProgressView = {
       } catch (err) {
         console.error("Polling job error:", err);
       }
-    }, 350);
+    }, 250);
+
+    // Initial immediate fetch
+    window.api.analysis.getJob(jobId).then(updateUI).catch(() => {});
   },
 
   stopTracking() {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
+    }
+    if (this.eventSource) {
+      this.eventSource.close();
+      this.eventSource = null;
     }
   },
 

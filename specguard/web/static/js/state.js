@@ -116,10 +116,11 @@ class AppState {
       const hashParams = new URLSearchParams(q);
       targetId = hashParams.get("session_id") || hashParams.get("sessionId");
     }
-    if (!targetId) {
+    const isAnalyzing = Boolean(this.get("activeJobId") || this.get("analysisStatus") === "ANALYZING");
+    if (!targetId && !isAnalyzing) {
       targetId = this.get("activeSessionId");
     }
-    if (!targetId) {
+    if (!targetId && !isAnalyzing) {
       targetId = localStorage.getItem("specguard-active-session");
     }
 
