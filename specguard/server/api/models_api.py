@@ -8,7 +8,11 @@ import os
 from typing import Dict, Any, List, Optional
 import logging
 from fastapi import APIRouter, Query
-import torch
+
+try:
+    import torch  # type: ignore
+except ImportError:  # Optional dependency — app must run CPU-only without it
+    torch = None  # type: ignore
 
 try:
     import psutil
@@ -32,12 +36,12 @@ def _get_hardware_profile() -> Dict[str, Any]:
         except Exception:
             ram_gb = 16.0
 
-    if torch.cuda.is_available():
+    if torch is not None and torch.cuda.is_available():
         device = "cuda"
         gpu_name = torch.cuda.get_device_name(0)
         gpu_available = True
         recommendations = f"NVIDIA GPU detected ({gpu_name}). CUDA acceleration active."
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    elif torch is not None and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         device = "mps"
         gpu_name = "Apple Silicon GPU (Metal Performance Shaders)"
         gpu_available = True

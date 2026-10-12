@@ -1,0 +1,16 @@
+{
+    "python.defaultInterpreterPath": "${workspaceFolder}/DocReady-Windows-x64/runtime/python.exe",
+    "python.terminal.activateEnvironment": false,
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:pip",
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "DOCREADY_ROOT": "${workspaceFolder}",
+        "SPECGUARD_APP_DIR": "${workspaceFolder}",
+        "SPECGUARD_DATA_DIR": "${workspaceFolder}/data"
+    }
+}
