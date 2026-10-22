@@ -9,17 +9,20 @@
 class DocumentViewerComponent {
   constructor(containerId, options = {}) {
     this.container = document.getElementById(containerId);
+    this.containerId = containerId;
     this.options = Object.assign({
       showDrawer: true,
       showSidebar: true,
-      initialZoom: 1.25
+      initialZoom: null, // null => auto Fit-Width on first layout
+      initialFitMode: "fit-width" // "fit-width" | "fit-page" | "custom"
     }, options);
 
     this.docId = null;
     this.currentPage = 1;
     this.totalPages = 1;
-    this.zoomLevel = this.options.initialZoom || 1.25;
-    this.viewModeState = "custom"; // "custom" | "fit-width" | "fit-page"
+    this.zoomLevel = typeof this.options.initialZoom === "number" ? this.options.initialZoom : 1.0;
+    // Default to Fit-Width so first paint respects the available pane size.
+    this.viewModeState = this.options.initialFitMode || "fit-width"; // "custom" | "fit-width" | "fit-page"
 
     this.findings = [];
     this.focusedFinding = null;
@@ -34,6 +37,11 @@ class DocumentViewerComponent {
     this._isProgrammaticScroll = false;
     this._scrollUnlockTimer = null;
     this._resizeObserver = null;
+    this._windowResizeHandler = null;
+    this._resizeRaf = null;
+    this._lastViewportW = 0;
+    this._lastViewportH = 0;
+    this._initialFitDone = false;
 
     // Filters and UI state
     this.activeCategoryFilter = "ALL";
@@ -41,6 +49,226 @@ class DocumentViewerComponent {
     this.exactOnlyFilter = false;
     this.legendVisible = false;
     this.activeTab = "pages";
+
+    // Review workflow state: finding_id -> { status: "approved"|"edited"|"skipped",
+    //   value: string|null, decidedAt: ISO string }. Persisted to localStorage
+    // per document so Approve/Edit/Skip progress survives navigation/reload.
+    this.reviewStates = {};
+    this.reviewStorageKey = null;
+    this._editMode = false;
+    // Identifies this instance as the originator of a store update so it can
+    // ignore the echo of its own change.
+    this._reviewSource = `viewer:${this.containerId || "viewer"}`;
+  }
+
+  // ---------- Review workflow (Approve / Edit / Skip) ----------
+
+  /** Re-render the review queue when another surface changes a decision. */
+  _onReviewStoreChange(findingId, source) {
+    if (this._destroyed) return;
+    if (source && source === this._reviewSource) return; // our own change
+    try {
+      this.renderSidebarContent();
+      if (this.focusedFinding && this.focusedFinding.finding_id === findingId) {
+        this.showFindingInDrawer(this.focusedFinding);
+      }
+    } catch (err) {
+      console.error("Error re-rendering review state:", err);
+    }
+  }
+
+  _subscribeReviewStore() {
+    if (this._unsubscribeReview) return;
+    if (!window.reviewStore || typeof window.reviewStore.subscribe !== "function") return;
+    this._unsubscribeReview = window.reviewStore.subscribe((findingId, source) => {
+      this._onReviewStoreChange(findingId, source);
+    });
+  }
+
+  _reviewKey() {
+    return (window.reviewStore && window.reviewStore.storageKey) || `docready-review-${this.docId || "unknown"}`;
+  }
+
+  _loadReviewStates() {
+    this._editMode = false;
+    if (window.reviewStore) {
+      // Shared store resolves the document identity so the Findings panel and
+      // the embedded viewer always agree on Approve/Edit/Skip decisions.
+      window.reviewStore.setActiveDocId(this.docId || null);
+      this.reviewStates = window.reviewStore.states;
+      return;
+    }
+    // Fallback (store unavailable): local per-document storage.
+    this.reviewStorageKey = `docready-review-${this.docId || "unknown"}`;
+    this.reviewStates = {};
+    try {
+      const raw = localStorage.getItem(this._reviewKey());
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") this.reviewStates = parsed;
+      }
+    } catch (_) {
+      this.reviewStates = {};
+    }
+  }
+
+  _saveReviewStates() {
+    if (window.reviewStore) {
+      window.reviewStore.save();
+      return;
+    }
+    try {
+      localStorage.setItem(this._reviewKey(), JSON.stringify(this.reviewStates));
+    } catch (_) {}
+  }
+
+  getReviewState(findingId) {
+    if (window.reviewStore) return window.reviewStore.get(findingId);
+    return this.reviewStates[findingId] || null;
+  }
+
+  isResolved(findingId) {
+    if (window.reviewStore) return window.reviewStore.isResolved(findingId);
+    const s = this.getReviewState(findingId);
+    return !!s && (s.status === "approved" || s.status === "edited");
+  }
+
+  _pendingFindings(list) {
+    return (list || []).filter((f) => !this.isResolved(f.finding_id));
+  }
+
+  _nextPendingFinding(excludeId = null) {
+    const list = this.getFilteredFindings();
+    const pending = this._pendingFindings(list).filter((f) => f.finding_id !== excludeId);
+    if (pending.length > 0) return pending[0];
+    return null;
+  }
+
+  approveFinding(findingId = null) {
+    const f = (findingId && this.findings.find((x) => x.finding_id === findingId)) || this.focusedFinding;
+    if (!f) return;
+    const value = f.detected_value || f.matched_text || f.original_content || null;
+    if (window.reviewStore) {
+      window.reviewStore.set(f.finding_id, "approved", value, this._reviewSource);
+    } else {
+      this.reviewStates[f.finding_id] = {
+        status: "approved",
+        value,
+        decidedAt: new Date().toISOString()
+      };
+      this._saveReviewStates();
+    }
+    if (window.toast) window.toast.success(`Approved ${f.finding_id} — marked resolved.`);
+    this.showFindingInDrawer(f);
+    this.renderSidebarContent();
+    const next = this._nextPendingFinding(f.finding_id);
+    if (next) {
+      setTimeout(() => this.focusFinding(next), 350);
+    } else if (window.toast) {
+      window.toast.info("All findings in this filter reviewed.");
+    }
+  }
+
+  skipFinding(findingId = null) {
+    const f = (findingId && this.findings.find((x) => x.finding_id === findingId)) || this.focusedFinding;
+    if (!f) return;
+    if (window.reviewStore) {
+      window.reviewStore.set(f.finding_id, "skipped", null, this._reviewSource);
+    } else {
+      this.reviewStates[f.finding_id] = {
+        status: "skipped",
+        value: null,
+        decidedAt: new Date().toISOString()
+      };
+      this._saveReviewStates();
+    }
+    if (window.toast) window.toast.info(`Skipped ${f.finding_id} — moving to next.`);
+    const list = this.getFilteredFindings();
+    const idx = list.findIndex((x) => x.finding_id === f.finding_id);
+    const next = list[(idx + 1) % list.length] || null;
+    if (next && next.finding_id !== f.finding_id) {
+      this.focusFinding(next);
+    } else {
+      this.showFindingInDrawer(f);
+      this.renderSidebarContent();
+    }
+  }
+
+  toggleEditMode(findingId = null) {
+    const f = (findingId && this.findings.find((x) => x.finding_id === findingId)) || this.focusedFinding;
+    if (!f) return;
+    this._editMode = !this._editMode;
+    this.showFindingInDrawer(f);
+    if (this._editMode) {
+      setTimeout(() => {
+        const input = this.container.querySelector("#review-edit-input");
+        if (input) { input.focus(); input.select(); }
+      }, 50);
+    }
+  }
+
+  saveEditedValue(findingId = null) {
+    const f = (findingId && this.findings.find((x) => x.finding_id === findingId)) || this.focusedFinding;
+    if (!f) return;
+    const input = this.container.querySelector("#review-edit-input");
+    const newVal = input ? input.value.trim() : "";
+    if (!newVal) {
+      if (window.toast) window.toast.warning("Enter a replacement value before saving.");
+      return;
+    }
+    if (window.reviewStore) {
+      window.reviewStore.set(f.finding_id, "edited", newVal, this._reviewSource);
+    } else {
+      this.reviewStates[f.finding_id] = {
+        status: "edited",
+        value: newVal,
+        decidedAt: new Date().toISOString()
+      };
+      this._saveReviewStates();
+    }
+    this._editMode = false;
+    f.detected_value = newVal;
+    f.matched_text = newVal;
+    if (window.toast) window.toast.success(`Updated ${f.finding_id} — marked resolved.`);
+    this.showFindingInDrawer(f);
+    this.renderSidebarContent();
+    const next = this._nextPendingFinding(f.finding_id);
+    if (next) {
+      setTimeout(() => this.focusFinding(next), 350);
+    }
+  }
+
+  // Engine-specific display metadata: canonical category label, engine name,
+  // and icon. Dedicated engine categories (TOC, Structure, Table, Equation,
+  // ...) are preserved as-is — never collapsed into generic numeric labels.
+  static engineCategoryInfo(category, sourceAnalyzer = "") {
+    const cat = String(category || "General").trim();
+    const upper = cat.toUpperCase();
+    const map = {
+      "TABLE OF CONTENTS": { label: "TOC Error", icon: "📑", engine: "TOC Analyzer" },
+      "TOC": { label: "TOC Error", icon: "📑", engine: "TOC Analyzer" },
+      "STRUCTURE": { label: "Structural", icon: "🏗️", engine: "Structure Analyzer" },
+      "FORMATTING": { label: "Formatting", icon: "🎨", engine: "Formatting Analyzer" },
+      "TABLE": { label: "Data Table", icon: "📊", engine: "Table Analyzer" },
+      "EQUATION": { label: "Equation", icon: "∑", engine: "Equation Analyzer" },
+      "FIGURE": { label: "Figure", icon: "🖼️", engine: "Figure Analyzer" },
+      "CROSS-REFERENCE": { label: "Cross-Reference", icon: "🔗", engine: "Cross-Reference Analyzer" },
+      "GRAMMAR & SPELLING": { label: "Grammar & Spelling", icon: "✏️", engine: "Grammar Analyzer" },
+      "SEMANTIC INCONSISTENCY": { label: "Semantic", icon: "🧠", engine: "Semantic Analyzer" },
+      "LOGICAL CONTRADICTION": { label: "Logical", icon: "⚖️", engine: "Logical Analyzer" },
+      "ENGINEERING PARAMETER": { label: "Engineering Value", icon: "⚙️", engine: "Engineering Analyzer" },
+      "STANDARDS DEVIATION": { label: "Standards", icon: "📏", engine: "Standards Analyzer" },
+      "IEEE COMPLIANCE": { label: "IEEE Compliance", icon: "🎓", engine: "IEEE Analyzer" }
+    };
+    const info = Object.assign({ label: cat, icon: "🔍", engine: "Inspection Engine" }, map[upper] || {});
+    if (sourceAnalyzer && /analyzer|engine/i.test(sourceAnalyzer)) {
+      info.engine = sourceAnalyzer;
+    }
+    return info;
+  }
+
+  getAffectedText(f) {
+    return f.matched_text || f.detected_value || f.original_content || f.expected_text || "—";
   }
 
   async loadDocument(docId, totalPages = 1, findings = []) {
@@ -53,6 +281,8 @@ class DocumentViewerComponent {
     this.focusedFinding = null;
     this.pagesInfo = {};
 
+    this._loadReviewStates();
+    this._subscribeReviewStore();
     this.render();
 
     try {
@@ -90,6 +320,32 @@ class DocumentViewerComponent {
     this.updateToolbar();
     this._initScrollObserver();
     this._initResizeObserver();
+
+    // Initial render must respect the available pane dimensions.
+    // Defer to next frames so the viewport has a real clientWidth/Height.
+    this._initialFitDone = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this._applyInitialFit();
+      });
+    });
+  }
+
+  _applyInitialFit() {
+    if (this._initialFitDone) return;
+    this._initialFitDone = true;
+    const mode = this.options.initialFitMode || this.viewModeState;
+    // Explicit numeric initialZoom wins over auto-fit.
+    if (typeof this.options.initialZoom === "number" && mode === "custom") {
+      this.setZoom(this.options.initialZoom, "custom");
+      return;
+    }
+    if (mode === "fit-page") {
+      this.fitPage();
+    } else {
+      // Default: Fit-Width so pages never clip horizontally on small panes.
+      this.fitWidth();
+    }
   }
 
   setPage(pageNum) {
@@ -126,7 +382,9 @@ class DocumentViewerComponent {
     } else if (this.viewModeState !== "fit-page" && this.viewModeState !== "fit-width") {
       this.viewModeState = "custom";
     }
-    this.zoomLevel = Math.max(0.4, Math.min(3.0, zoom));
+    // Lower bound 0.15 keeps small/narrow viewports fully visible (Fit Page /
+    // Fit Width); upper bound 3.0 preserves max zoom-in detail.
+    this.zoomLevel = Math.max(0.15, Math.min(3.0, zoom));
     this.updatePageSizes();
     this.updateToolbar();
   }
@@ -135,9 +393,11 @@ class DocumentViewerComponent {
     const viewport = this.container.querySelector("#viewer-canvas-viewport");
     if (!viewport) return;
 
-    // Available viewport space (accounting for padding & page label)
-    const availableW = Math.max(120, viewport.clientWidth - 48);
-    const availableH = Math.max(120, viewport.clientHeight - 64);
+    // Available viewport space (accounting for padding & page label).
+    // Keep page zoom-out usable on very small panes; allow < 0.4 so full
+    // pages still fit instead of clipping on small viewports.
+    const availableW = Math.max(40, viewport.clientWidth - 48);
+    const availableH = Math.max(40, viewport.clientHeight - 64);
 
     const curPageInfo = this.pagesInfo[this.currentPage] || { width: this.pageWidth, height: this.pageHeight };
     const pW = curPageInfo.width || 612;
@@ -145,7 +405,7 @@ class DocumentViewerComponent {
 
     const scaleW = availableW / pW;
     const scaleH = availableH / pH;
-    const targetZoom = Math.max(0.4, Math.min(3.0, Math.min(scaleW, scaleH)));
+    const targetZoom = Math.max(0.15, Math.min(3.0, Math.min(scaleW, scaleH)));
 
     this.viewModeState = "fit-page";
     this.setZoom(targetZoom, "fit-page");
@@ -156,11 +416,12 @@ class DocumentViewerComponent {
     const viewport = this.container.querySelector("#viewer-canvas-viewport");
     if (!viewport) return;
 
-    const availableW = Math.max(120, viewport.clientWidth - 48);
+    const availableW = Math.max(40, viewport.clientWidth - 48);
     const curPageInfo = this.pagesInfo[this.currentPage] || { width: this.pageWidth, height: this.pageHeight };
     const pW = curPageInfo.width || 612;
 
-    const targetZoom = Math.max(0.4, Math.min(3.0, availableW / pW));
+    // Allow zooming out below 0.4 so narrow panes don't clip horizontally.
+    const targetZoom = Math.max(0.15, Math.min(3.0, availableW / pW));
 
     this.viewModeState = "fit-width";
     this.setZoom(targetZoom, "fit-width");
@@ -184,6 +445,7 @@ class DocumentViewerComponent {
   focusFinding(finding) {
     if (!finding) return;
     this.focusedFinding = finding;
+    this._editMode = false;
     const targetPage = parseInt(finding.page_number || finding.page || 1, 10);
     if (targetPage >= 1 && targetPage <= this.totalPages) {
       this.currentPage = targetPage;
@@ -203,7 +465,8 @@ class DocumentViewerComponent {
       this.showFindingInDrawer(finding);
     }
 
-    // Smoothly scroll defect directly into view in the document viewport
+    // Clicking a category/finding item scrolls + highlights the exact
+    // coordinate box on the canvas page (hover/pulse emphasis).
     setTimeout(() => {
       const viewportEl = this.container.querySelector("#viewer-canvas-viewport");
       const groupEl = this.container.querySelector(`[data-finding-id="${finding.finding_id}"]`);
@@ -228,8 +491,13 @@ class DocumentViewerComponent {
           this._isProgrammaticScroll = false;
         }, 500);
 
+        // Remove stale pulses, then pulse + hover-highlight the target.
+        this.container.querySelectorAll(".defect-pulsing").forEach((el) => el.classList.remove("defect-pulsing"));
+        this.container.querySelectorAll(".defect-hover").forEach((el) => el.classList.remove("defect-hover"));
         groupEl.classList.add("defect-pulsing");
+        groupEl.classList.add("defect-hover");
         setTimeout(() => groupEl.classList.remove("defect-pulsing"), 2400);
+        setTimeout(() => groupEl.classList.remove("defect-hover"), 4000);
       } else if (pageEl) {
         this.scrollToPage(targetPage, true);
       }
@@ -305,6 +573,11 @@ class DocumentViewerComponent {
   render() {
     if (!this.container) return;
 
+    // Host fills the mount point via flex (NOT height:100% — percentage
+    // heights in this nested flex chain resolve against indefinite heights,
+    // making content grow to full stack height and hiding bottom pages).
+    this.container.style.cssText = "display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; max-height: 100%; min-width: 0; max-width: 100%; overflow: hidden; box-sizing: border-box;";
+
     this.container.innerHTML = `
       <div class="viewer-layout">
         <!-- LEFT: Page Navigation Sidebar with Multi-Page Tabs -->
@@ -314,6 +587,7 @@ class DocumentViewerComponent {
             <button class="v-tab ${this.activeTab === 'structure' ? 'active' : ''}" data-tab="structure" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'structure' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'structure' ? 'var(--accent-primary)' : 'transparent'};">Tree</button>
             <button class="v-tab ${this.activeTab === 'toc' ? 'active' : ''}" data-tab="toc" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'toc' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'toc' ? 'var(--accent-primary)' : 'transparent'};">TOC</button>
             <button class="v-tab ${this.activeTab === 'assets' ? 'active' : ''}" data-tab="assets" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'assets' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'assets' ? 'var(--accent-primary)' : 'transparent'};">Assets</button>
+            <button class="v-tab ${this.activeTab === 'findings' ? 'active' : ''}" data-tab="findings" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'findings' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'findings' ? 'var(--accent-primary)' : 'transparent'};">Review</button>
             <button class="v-tab ${this.activeTab === 'xrefs' ? 'active' : ''}" data-tab="xrefs" style="flex: 1; padding: 7px 2px; font-size: 11px; font-weight: 700; border: none; background: transparent; cursor: pointer; color: ${this.activeTab === 'xrefs' ? 'var(--accent-primary)' : 'var(--text-muted)'}; border-bottom: 2px solid ${this.activeTab === 'xrefs' ? 'var(--accent-primary)' : 'transparent'};">Refs</button>
           </div>
           <div class="pages-list" id="viewer-pages-list" style="overflow-y: auto; flex: 1; padding: 6px; min-height: 0;"></div>
@@ -338,17 +612,24 @@ class DocumentViewerComponent {
               <button class="btn btn-secondary btn-sm" id="viewer-issue-next" title="Next Issue">Next ⏭</button>
             </div>
 
-            <!-- Filters -->
+            <!-- Filters: engine-specific categories (TOC, Structure, Table,
+                 Equation, ...) — never generic numeric mismatches -->
             <div style="display: flex; align-items: center; gap: 6px;">
               <select id="viewer-cat-filter" class="form-select" style="font-size: 11px; padding: 3px 6px; height: 26px; border-radius: var(--radius-sm);">
                 <option value="ALL">All Categories</option>
-                <option value="Grammar & Spelling">Spelling & Grammar</option>
-                <option value="Figure">Figures & Diagrams</option>
+                <option value="Table of Contents">TOC Errors</option>
+                <option value="Structure">Section Hierarchy</option>
+                <option value="Formatting">Formatting</option>
                 <option value="Table">Data Tables</option>
-                <option value="Table of Contents">Table of Contents</option>
-                <option value="Document Structure">Section Hierarchy</option>
-                <option value="Cross-Reference & Citation">Cross-References</option>
                 <option value="Equation">Equations</option>
+                <option value="Figure">Figures</option>
+                <option value="Cross-Reference">Cross-References</option>
+                <option value="Grammar & Spelling">Grammar & Spelling</option>
+                <option value="Semantic Inconsistency">Semantic</option>
+                <option value="Logical Contradiction">Logical</option>
+                <option value="Engineering Parameter">Engineering Values</option>
+                <option value="Standards Deviation">Standards</option>
+                <option value="IEEE Compliance">IEEE Compliance</option>
               </select>
 
               <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--text-secondary);">
@@ -413,11 +694,16 @@ class DocumentViewerComponent {
             </div>
           </div>
 
-          <!-- Document Viewport - Dedicated Scroll Container (Section 3) -->
+          <!-- Document Viewport - Independent Scroll Container.
+               The ONLY scroller in this chain: all stacked pages render
+               inside #viewer-pages-container and are reachable by scrolling
+               here. Bottom padding + end spacer keep the final page clear
+               of the status bar. -->
           <div class="document-viewport canvas-viewport" id="viewer-canvas-viewport">
             <div class="document-pages-container" id="viewer-pages-container">
               <!-- Dynamically populated continuous multi-page flow -->
             </div>
+            <div style="height: 64px; flex-shrink: 0;" aria-hidden="true"></div>
           </div>
         </div>
 
@@ -462,6 +748,18 @@ class DocumentViewerComponent {
 
     this.container.querySelector("#viewer-issue-prev").onclick = () => this.prevFinding();
     this.container.querySelector("#viewer-issue-next").onclick = () => this.nextFinding();
+
+    // Keyboard review flow: A = Approve, E = Edit, S/N = Skip/Next.
+    this._keyHandler = (e) => {
+      const tag = (document.activeElement && document.activeElement.tagName) || "";
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return;
+      if (!this.focusedFinding) return;
+      const k = (e.key || "").toLowerCase();
+      if (k === "a") { e.preventDefault(); this.approveFinding(); }
+      else if (k === "e") { e.preventDefault(); this.toggleEditMode(); }
+      else if (k === "s" || k === "n") { e.preventDefault(); this.skipFinding(); }
+    };
+    document.addEventListener("keydown", this._keyHandler);
 
     const catSelect = this.container.querySelector("#viewer-cat-filter");
     if (catSelect) {
@@ -562,17 +860,97 @@ class DocumentViewerComponent {
 
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this._windowResizeHandler) {
+      window.removeEventListener("resize", this._windowResizeHandler);
+      this._windowResizeHandler = null;
+    }
+    if (this._resizeRaf) {
+      cancelAnimationFrame(this._resizeRaf);
+      this._resizeRaf = null;
     }
 
-    this._resizeObserver = new ResizeObserver(() => {
-      if (this.viewModeState === "fit-page") {
-        this.fitPage();
-      } else if (this.viewModeState === "fit-width") {
-        this.fitWidth();
-      }
-    });
+    // Seed last-known size so the first callback doesn't spuriously refit.
+    this._lastViewportW = viewport.clientWidth;
+    this._lastViewportH = viewport.clientHeight;
 
+    // Recalculate canvas scale on pane changes; skip no-op resizes and
+    // debounce via rAF to avoid ResizeObserver feedback loops.
+    const handleViewportResize = () => {
+      const w = viewport.clientWidth;
+      const h = viewport.clientHeight;
+      // Ignore sub-pixel jitter / no-op callbacks.
+      if (Math.abs(w - this._lastViewportW) < 2 && Math.abs(h - this._lastViewportH) < 2) {
+        return;
+      }
+      this._lastViewportW = w;
+      this._lastViewportH = h;
+      if (this._resizeRaf) cancelAnimationFrame(this._resizeRaf);
+      this._resizeRaf = requestAnimationFrame(() => {
+        this._resizeRaf = null;
+        // Only auto-refit when user hasn't taken manual zoom control.
+        if (this.viewModeState === "fit-page") {
+          this.fitPage();
+        } else if (this.viewModeState === "fit-width") {
+          this.fitWidth();
+        }
+      });
+    };
+
+    this._resizeObserver = new ResizeObserver(handleViewportResize);
     this._resizeObserver.observe(viewport);
+
+    // Window-level resize covers sidebar collapse, drawer toggle, and
+    // viewport-height changes that don't always fire the element observer.
+    // In fit modes, recalc scale; in custom zoom keep scale but keep the
+    // current page visible so it never gets clipped off-screen.
+    this._windowResizeHandler = () => {
+      const w = viewport.clientWidth;
+      const h = viewport.clientHeight;
+      if (Math.abs(w - this._lastViewportW) < 2 && Math.abs(h - this._lastViewportH) < 2) {
+        return;
+      }
+      this._lastViewportW = w;
+      this._lastViewportH = h;
+      if (this._resizeRaf) cancelAnimationFrame(this._resizeRaf);
+      this._resizeRaf = requestAnimationFrame(() => {
+        this._resizeRaf = null;
+        if (this.viewModeState === "fit-page") {
+          this.fitPage();
+        } else if (this.viewModeState === "fit-width") {
+          this.fitWidth();
+        } else {
+          this.scrollToPage(this.currentPage, false);
+        }
+      });
+    };
+    window.addEventListener("resize", this._windowResizeHandler, { passive: true });
+  }
+
+  destroy() {
+    this._destroyed = true;
+    if (this._unsubscribeReview) {
+      this._unsubscribeReview();
+      this._unsubscribeReview = null;
+    }
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this._windowResizeHandler) {
+      window.removeEventListener("resize", this._windowResizeHandler);
+      this._windowResizeHandler = null;
+    }
+    if (this._resizeRaf) {
+      cancelAnimationFrame(this._resizeRaf);
+      this._resizeRaf = null;
+    }
+    if (this._keyHandler) {
+      document.removeEventListener("keydown", this._keyHandler);
+      this._keyHandler = null;
+    }
+    clearTimeout(this._scrollUnlockTimer);
   }
 
   renderPages() {
@@ -684,6 +1062,57 @@ class DocumentViewerComponent {
         item.onclick = () => this.setPage(i);
         listEl.appendChild(item);
       }
+    } else if (this.activeTab === "findings") {
+      // Review queue: every finding renders as a compact, clickable review
+      // row grouped by engine category. Clicking scrolls + highlights the
+      // exact canvas box; Approve/Edit marks resolved and auto-advances.
+      if (activeFindings.length === 0) {
+        listEl.innerHTML = `<div style="padding: 12px; font-size: 11.5px; color: var(--text-muted);">No findings match the active filters.</div>`;
+        return;
+      }
+      const pending = this._pendingFindings(activeFindings);
+      const header = document.createElement("div");
+      header.style.cssText = "padding: 8px 10px; font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px;";
+      header.textContent = `Review queue — ${pending.length} of ${activeFindings.length} pending`;
+      listEl.appendChild(header);
+      let lastLabel = null;
+      activeFindings.forEach((f, idx) => {
+        const info = DocumentViewerComponent.engineCategoryInfo(f.category, f.source_analyzer);
+        if (info.label !== lastLabel) {
+          lastLabel = info.label;
+          const catHeader = document.createElement("div");
+          catHeader.style.cssText = "padding: 8px 10px 2px; font-size: 10.5px; font-weight: 800; color: var(--accent-primary); text-transform: uppercase; letter-spacing: 0.4px; cursor: pointer;";
+          catHeader.textContent = `${info.icon} ${info.label}`;
+          catHeader.title = `Jump to first ${info.label} finding`;
+          catHeader.onclick = () => this.focusFinding(f);
+          listEl.appendChild(catHeader);
+        }
+        const review = this.getReviewState(f.finding_id);
+        const resolved = this.isResolved(f.finding_id);
+        const row = document.createElement("div");
+        row.className = `review-row ${this.focusedFinding && this.focusedFinding.finding_id === f.finding_id ? "active" : ""} ${resolved ? "resolved" : ""}`;
+        row.setAttribute("data-review-row", f.finding_id);
+        row.title = `${info.label} — ${this.getAffectedText(f)} (Page ${f.page_number || f.page || 1}). Click to scroll + highlight on canvas.`;
+        row.innerHTML = `
+          <span class="review-row-status">${resolved ? "✓" : review && review.status === "skipped" ? "⏭" : `${idx + 1}`}</span>
+          <span class="review-row-body">
+            <span class="review-row-id">${escapeHtml(f.finding_id || "")} · P.${escapeHtml(String(f.page_number || f.page || 1))}</span>
+            <span class="review-row-text">${escapeHtml(String(this.getAffectedText(f)).slice(0, 80))}</span>
+          </span>
+        `;
+        row.onclick = () => this.focusFinding(f);
+        row.onmouseenter = () => {
+          const g = this.container.querySelector(`[data-finding-id="${f.finding_id}"]`);
+          if (g) g.classList.add("defect-hover");
+        };
+        row.onmouseleave = () => {
+          const g = this.container.querySelector(`[data-finding-id="${f.finding_id}"]`);
+          if (g && (!this.focusedFinding || this.focusedFinding.finding_id !== f.finding_id)) {
+            g.classList.remove("defect-hover");
+          }
+        };
+        listEl.appendChild(row);
+      });
     } else if (this.activeTab === "structure") {
       const sections = this.docDetails?.sections || [];
       if (sections.length === 0) {
@@ -1114,14 +1543,63 @@ class DocumentViewerComponent {
     }
   }
 
+  // Minimal review card: error type + engine category, exact affected text,
+  // and three action controls (Approve / Edit / Skip). Dense technical
+  // blocks (deviation magnitudes, verbose explanations, raw engine
+  // metadata) are intentionally omitted from this panel.
+  _reviewCardHtml(f) {
+    const info = DocumentViewerComponent.engineCategoryInfo(f.category, f.source_analyzer);
+    const affected = this.getAffectedText(f);
+    const review = this.getReviewState(f.finding_id);
+    const pNum = f.page_number || f.page || 1;
+    const list = this.getFilteredFindings();
+    const idx = list.findIndex((x) => x.finding_id === f.finding_id);
+    const pos = idx >= 0 ? `${idx + 1} / ${list.length}` : "";
+    const sev = String(f.severity || "Low");
+    const sevCls = /critical/i.test(sev) ? "badge-critical" : "";
+    const statusBanner = review && review.status === "approved"
+      ? `<div class="review-status-banner review-approved">Approved — resolved as-is</div>`
+      : review && review.status === "edited"
+      ? `<div class="review-status-banner review-edited">Updated — resolved</div>`
+      : review && review.status === "skipped"
+      ? `<div class="review-status-banner review-skipped">Skipped — revisit anytime</div>`
+      : "";
+    const editBlock = this._editMode ? `
+      <div class="review-edit-block">
+        <label class="review-field-label" for="review-edit-input">Corrected value</label>
+        <input id="review-edit-input" class="form-input review-edit-input" type="text"
+          value="${escapeHtml(String(review && review.value ? review.value : affected))}" />
+        <div class="review-edit-row">
+          <button class="btn btn-primary btn-sm" data-review-action="save-edit">Save Value</button>
+          <button class="btn btn-secondary btn-sm" data-review-action="cancel-edit">Cancel</button>
+        </div>
+      </div>
+    ` : "";
+    return `
+      ${statusBanner}
+      <div class="review-card">
+        <div class="review-card-top">
+          <span style="font-size: 13px; font-weight: 800;">${escapeHtml(f.finding_id || "")}</span>
+          <span class="badge ${sevCls}">${escapeHtml(sev)}</span>
+        </div>
+        <div class="review-pos">${escapeHtml(pos)}</div>
+        <div class="review-error-type">${info.icon} ${escapeHtml(info.label)}</div>
+        <div class="review-engine">${escapeHtml(info.engine)} · Page ${escapeHtml(String(pNum))}</div>
+        <div class="review-field-label">Affected text / target value</div>
+        <div class="review-affected-text">${escapeHtml(String(affected))}</div>
+        ${editBlock}
+        <div class="review-actions">
+          <button class="btn btn-primary review-btn-approve" data-review-action="approve">Approve</button>
+          <button class="btn btn-secondary review-btn-edit" data-review-action="edit">${this._editMode ? "Editing…" : "Edit Value"}</button>
+          <button class="btn btn-secondary review-btn-skip" data-review-action="skip">Skip / Next</button>
+        </div>
+      </div>
+    `;
+  }
+
   showFindingInDrawer(f) {
     const drawerContent = this.container.querySelector("#viewer-drawer-content");
     if (!drawerContent) return;
-
-    const normSev = (f.severity || "LOW").toUpperCase();
-    const sevClass = (normSev === "INFORMATIONAL" || normSev === "INFO") ? "badge-info" : `badge-${normSev.toLowerCase()}`;
-    const precision = f.location_precision || "APPROXIMATE";
-    const isExact = precision.startsWith("EXACT");
 
     let relatedHtml = "";
     if (f.related_finding_ids && f.related_finding_ids.length > 0) {
@@ -1146,75 +1624,26 @@ class DocumentViewerComponent {
       `;
     }
 
-    drawerContent.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between;">
-        <span style="font-size: 14px; font-weight: 800; color: var(--text-primary);">${f.finding_id}</span>
-        <div style="display: flex; gap: 6px; align-items: center;">
-          <span class="badge ${isExact ? 'badge-success' : 'badge-outline'}" style="font-size: 10px;">
-            ${escapeHtml(precision)}
-          </span>
-          <span class="badge ${sevClass}">${f.severity}</span>
-        </div>
-      </div>
+    drawerContent.innerHTML = this._reviewCardHtml(f);
 
-      <div class="finding-prop-group">
-        <span class="finding-prop-label">Category & Issue Type</span>
-        <span class="finding-prop-value" style="font-weight: 700; color: var(--text-primary);">
-          ${escapeHtml(f.category)} ${f.issue_type ? `• <span style="font-size: 11px; color: var(--accent-primary);">${escapeHtml(f.issue_type)}</span>` : ''}
-        </span>
-      </div>
-
-      <div class="finding-prop-group">
-        <span class="finding-prop-label">Location / Section</span>
-        <span class="finding-prop-value">Page ${f.page_number || f.page} • ${escapeHtml(f.location || "General Text")}</span>
-      </div>
-
-      <div class="finding-prop-group">
-        <span class="finding-prop-label">Exact Affected Text</span>
-        <div class="finding-prop-code" style="border-left: 3px solid var(--sev-high); background: rgba(234, 88, 12, 0.08);">
-          ${escapeHtml(String(f.matched_text || f.detected_value || f.original_content || "N/A"))}
-        </div>
-      </div>
-
-      <div class="finding-prop-group">
-        <span class="finding-prop-label">Expected Correction / Spec</span>
-        <div class="finding-prop-code" style="border-left: 3px solid #10b981; color: #10b981; background: rgba(16, 185, 129, 0.08);">
-          ${escapeHtml(String(f.suggested_fix || f.expected_text || f.expected_value || "In accordance with standard"))}
-        </div>
-      </div>
-
-      ${relatedHtml}
-
-      ${f.deviation ? `
-        <div class="finding-prop-group">
-          <span class="finding-prop-label">Deviation Magnitude</span>
-          <span class="finding-prop-value" style="color: var(--sev-high); font-weight: 700;">${escapeHtml(f.deviation)}</span>
-        </div>
-      ` : ""}
-
-      <div class="finding-prop-group">
-        <span class="finding-prop-label">Technical Explanation</span>
-        <p class="finding-prop-value" style="font-size: 12px; line-height: 1.45;">${escapeHtml(f.explanation || "No explanation provided.")}</p>
-      </div>
-
-      <div class="finding-prop-group">
-        <span class="finding-prop-label">Suggested Action (Information Only)</span>
-        <p class="finding-prop-value" style="color: var(--accent-primary); font-weight: 600; font-size: 12px; line-height: 1.45;">
-          💡 ${escapeHtml(f.suggested_fix || f.suggested_correction || "Verify and correct manually in the source document.")}
-        </p>
-      </div>
-
-      <div class="finding-prop-group">
-        <span class="finding-prop-label">Engineering Standard Reference</span>
-        <span class="finding-prop-value" style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">
-          ${escapeHtml(f.rule_reference || "SpecGuard Compliance Standards")}
-        </span>
-      </div>
-
-      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-muted); text-align: center;">
-        Read-Only Inspection Mode • Source Document Unmodified
-      </div>
-    `;
+    drawerContent.querySelectorAll("[data-review-action]").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const action = btn.getAttribute("data-review-action");
+        if (action === "approve") this.approveFinding(f.finding_id);
+        else if (action === "skip") this.skipFinding(f.finding_id);
+        else if (action === "edit") this.toggleEditMode(f.finding_id);
+        else if (action === "save-edit") this.saveEditedValue(f.finding_id);
+        else if (action === "cancel-edit") this.toggleEditMode(f.finding_id);
+      };
+    });
+    const editInput = drawerContent.querySelector("#review-edit-input");
+    if (editInput) {
+      editInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); this.saveEditedValue(f.finding_id); }
+        if (e.key === "Escape") { this.toggleEditMode(f.finding_id); }
+      });
+    }
 
     const drawer = this.container.querySelector("#viewer-detail-drawer");
     if (drawer) drawer.classList.remove("hidden");
@@ -1244,11 +1673,13 @@ class DocumentViewerComponent {
     const issueCounter = this.container.querySelector("#viewer-issue-counter");
     const filteredList = this.getFilteredFindings();
     if (issueCounter) {
+      const pending = this._pendingFindings(filteredList);
       if (this.focusedFinding) {
         const curIdx = filteredList.findIndex((f) => f.finding_id === this.focusedFinding.finding_id);
-        issueCounter.textContent = `${curIdx >= 0 ? curIdx + 1 : '?'}/${filteredList.length}`;
+        // Review progress: pending count + position in filtered list.
+        issueCounter.textContent = `${pending.length} pending · ${curIdx >= 0 ? curIdx + 1 : '?'}/${filteredList.length}`;
       } else {
-        issueCounter.textContent = `${filteredList.length} Issues`;
+        issueCounter.textContent = `${pending.length} pending · ${filteredList.length} Issues`;
       }
     }
   }

@@ -28,7 +28,6 @@ window.DashboardView = {
             window.appState.set("activeSessionId", job.session_id);
             window.appState.set("activeJobId", null);
           }
-        }
       } catch (err) {
         console.warn("Could not check active job status for dashboard:", err);
       }

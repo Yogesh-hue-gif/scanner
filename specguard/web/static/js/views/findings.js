@@ -1,11 +1,12 @@
 /**
  * SpecGuard Document Findings & Direct Defect Location View
  * Two coordinated areas:
- * 1. Finding Information (Left): What is wrong, Defect Location, Detected vs Expected, Why it failed, Suggested Action.
+ * 1. FindingDetailsPanel (Left): Slim review card — error type/category + ID,
+ *    exact affected text, and Approve / Edit / Skip actions.
  * 2. Document Inspection (Right): Synchronized high-DPI document viewer with automatic page navigation,
  *    defect bounding box centering, high-visibility defect pointer markers ([04] ▼ DEFECT),
  *    multi-location navigation, and missing-content inspection callouts.
- * Strictly 100% READ-ONLY inspection overlay. No editing or source modifications.
+ * Review decisions (Approve/Edit/Skip) persist per session in localStorage.
  */
 
 window.FindingsView = {
@@ -24,6 +25,9 @@ window.FindingsView = {
   activeDoc: null,
   viewMode: "coordinated", // "coordinated" or "table"
   _keyHandler: null,
+  // Identifies this view as the originator of a store update so it can ignore
+  // the echo of its own change.
+  _reviewSource: "findings",
 
   async render(container) {
     const activeJobId = window.appState.get("activeJobId");
@@ -247,6 +251,7 @@ window.FindingsView = {
     `;
 
     this._bindEvents();
+    this._loadReviewStates();
     await this.loadDocumentAndFindings();
     this._bindKeyboardNavigation();
   },
@@ -619,6 +624,203 @@ window.FindingsView = {
     this.selectFinding(this.filteredFindings[nextIdx].finding_id);
   },
 
+  // ---- Slim FindingDetailsPanel review state (per-view) ----
+  reviewStates: {},
+  _editMode: false,
+
+  _reviewKey() {
+    return (window.reviewStore && window.reviewStore.storageKey) || `docready-review-${this._reviewDocId()}`;
+  },
+
+  /** Document identity shared with DocumentViewerComponent (see review_store.js). */
+  _reviewDocId() {
+    const sid = window.appState ? window.appState.get("activeSessionId") : null;
+    const doc = this.activeDoc || (window.appState ? window.appState.get("activeDocument") : null);
+    const id = (doc && (doc.file_hash || doc.filename || doc.document_id)) || sid;
+    return id || "unknown";
+  },
+
+  /** Re-render this view when the other surface changes a review decision. */
+  _onReviewStoreChange(findingId, source) {
+    if (source && source === this._reviewSource) return; // our own change
+    try {
+      if (this.selectedFinding) this.renderFindingDetail(this.selectedFinding);
+      this.renderTableView();
+      const v = this.viewerInstance;
+      if (v && typeof v.renderSidebarContent === "function") v.renderSidebarContent();
+    } catch (err) {
+      console.error("Error re-rendering review state:", err);
+    }
+  },
+
+  _subscribeReviewStore() {
+    if (this._unsubscribeReview) return;
+    if (!window.reviewStore || typeof window.reviewStore.subscribe !== "function") return;
+    this._unsubscribeReview = window.reviewStore.subscribe((findingId, source) => {
+      this._onReviewStoreChange(findingId, source);
+    });
+  },
+
+  _loadReviewStates() {
+    this._editMode = false;
+    if (window.reviewStore) {
+      // Same key resolution as the embedded document viewer, so a decision
+      // made in either surface is immediately visible in the other.
+      window.reviewStore.setActiveDocId(this._reviewDocId());
+      this.reviewStates = window.reviewStore.states;
+      this._subscribeReviewStore();
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(this._reviewKey());
+      const parsed = raw ? JSON.parse(raw) : {};
+      this.reviewStates = (parsed && typeof parsed === "object") ? parsed : {};
+    } catch (_) {
+      this.reviewStates = {};
+    }
+  },
+
+  _saveReviewStates() {
+    if (window.reviewStore) {
+      window.reviewStore.save();
+      return;
+    }
+    try {
+      localStorage.setItem(this._reviewKey(), JSON.stringify(this.reviewStates));
+    } catch (_) {}
+  },
+
+  getReviewState(findingId) {
+    if (window.reviewStore) return window.reviewStore.get(findingId);
+    return this.reviewStates[findingId] || null;
+  },
+
+  isResolved(findingId) {
+    if (window.reviewStore) return window.reviewStore.isResolved(findingId);
+    const s = this.getReviewState(findingId);
+    return !!s && (s.status === "approved" || s.status === "edited");
+  },
+
+  // Canonical engine label/icon for the card header. Dedicated categories
+  // (TOC, Structural, Formatting, Table, Equation, ...) are kept as-is.
+  _engineInfo(category) {
+    const cat = String(category || "General").trim();
+    const map = {
+      "TABLE OF CONTENTS": { label: "TOC Error", icon: "📑" },
+      "TOC": { label: "TOC Error", icon: "📑" },
+      "STRUCTURE": { label: "Structural", icon: "🏗️" },
+      "FORMATTING": { label: "Formatting", icon: "🎨" },
+      "TABLE": { label: "Data Table", icon: "📊" },
+      "EQUATION": { label: "Equation", icon: "∑" },
+      "FIGURE": { label: "Figure", icon: "🖼️" },
+      "CROSS-REFERENCE": { label: "Cross-Reference", icon: "🔗" },
+      "GRAMMAR & SPELLING": { label: "Grammar & Spelling", icon: "✏️" },
+      "SEMANTIC INCONSISTENCY": { label: "Semantic", icon: "🧠" },
+      "LOGICAL CONTRADICTION": { label: "Logical", icon: "⚖️" },
+      "ENGINEERING PARAMETER": { label: "Engineering Value", icon: "⚙️" },
+      "STANDARDS DEVIATION": { label: "Standards", icon: "📏" },
+      "IEEE COMPLIANCE": { label: "IEEE Compliance", icon: "🎓" }
+    };
+    const hit = map[cat.toUpperCase()];
+    return hit ? { ...hit } : { label: cat, icon: "🔍" };
+  },
+
+  _affectedText(f) {
+    return f.matched_text || f.detected_value || f.original_content || f.expected_text || "—";
+  },
+
+  approveFinding(findingId = null) {
+    const f = (findingId && this.allFindings.find((x) => x.finding_id === findingId)) || this.selectedFinding;
+    if (!f) return;
+    const value = f.detected_value || f.matched_text || f.original_content || null;
+    if (window.reviewStore) {
+      window.reviewStore.set(f.finding_id, "approved", value, this._reviewSource);
+    } else {
+      this.reviewStates[f.finding_id] = {
+        status: "approved",
+        value,
+        decidedAt: new Date().toISOString()
+      };
+      this._saveReviewStates();
+    }
+    if (window.toast) window.toast.success(`Approved ${f.finding_id} — marked resolved.`);
+    this.renderFindingDetail(f);
+    this.renderTableView();
+    const idx = this.filteredFindings.findIndex((x) => x.finding_id === f.finding_id);
+    const next = this.filteredFindings[(idx + 1) % this.filteredFindings.length] || null;
+    if (next && next.finding_id !== f.finding_id) {
+      setTimeout(() => this.selectFinding(next.finding_id), 350);
+    }
+  },
+
+  skipFinding(findingId = null) {
+    const f = (findingId && this.allFindings.find((x) => x.finding_id === findingId)) || this.selectedFinding;
+    if (!f) return;
+    if (window.reviewStore) {
+      window.reviewStore.set(f.finding_id, "skipped", null, this._reviewSource);
+    } else {
+      this.reviewStates[f.finding_id] = {
+        status: "skipped",
+        value: null,
+        decidedAt: new Date().toISOString()
+      };
+      this._saveReviewStates();
+    }
+    if (window.toast) window.toast.info(`Skipped ${f.finding_id} — moving to next.`);
+    const idx = this.filteredFindings.findIndex((x) => x.finding_id === f.finding_id);
+    const next = this.filteredFindings[(idx + 1) % this.filteredFindings.length] || null;
+    if (next && next.finding_id !== f.finding_id) {
+      this.selectFinding(next.finding_id);
+    } else {
+      this.renderFindingDetail(f);
+    }
+  },
+
+  toggleEditMode(findingId = null) {
+    const f = (findingId && this.allFindings.find((x) => x.finding_id === findingId)) || this.selectedFinding;
+    if (!f) return;
+    this._editMode = !this._editMode;
+    this.renderFindingDetail(f);
+    if (this._editMode) {
+      setTimeout(() => {
+        const input = document.getElementById("review-edit-input");
+        if (input) { input.focus(); input.select(); }
+      }, 50);
+    }
+  },
+
+  saveEditedValue(findingId = null) {
+    const f = (findingId && this.allFindings.find((x) => x.finding_id === findingId)) || this.selectedFinding;
+    if (!f) return;
+    const input = document.getElementById("review-edit-input");
+    const newVal = input ? input.value.trim() : "";
+    if (!newVal) {
+      if (window.toast) window.toast.warning("Enter a replacement value before saving.");
+      return;
+    }
+    if (window.reviewStore) {
+      window.reviewStore.set(f.finding_id, "edited", newVal, this._reviewSource);
+    } else {
+      this.reviewStates[f.finding_id] = {
+        status: "edited",
+        value: newVal,
+        decidedAt: new Date().toISOString()
+      };
+      this._saveReviewStates();
+    }
+    this._editMode = false;
+    f.detected_value = newVal;
+    f.matched_text = newVal;
+    if (window.toast) window.toast.success(`Updated ${f.finding_id} — marked resolved.`);
+    this.renderFindingDetail(f);
+    this.renderTableView();
+    const idx = this.filteredFindings.findIndex((x) => x.finding_id === f.finding_id);
+    const next = this.filteredFindings[(idx + 1) % this.filteredFindings.length] || null;
+    if (next && next.finding_id !== f.finding_id) {
+      setTimeout(() => this.selectFinding(next.finding_id), 350);
+    }
+  },
+
   renderEmptyFindingDetail() {
     const col = document.getElementById("findings-info-column");
     if (!col) return;
@@ -631,179 +833,70 @@ window.FindingsView = {
     `;
   },
 
+  // Slim FindingDetailsPanel: ONLY header (error type + ID), affected text
+  // box, and the three action buttons (Approve / Edit / Skip). Verbose
+  // blocks (Deviation Magnitude, Technical Explanation, Suggested Action,
+  // Engineering Standard Reference, defect-location grids) are removed.
   renderFindingDetail(f) {
     const col = document.getElementById("findings-info-column");
     if (!col) return;
 
-    const normSev = (f.severity || "LOW").toUpperCase();
-    const sevClass = (normSev === "INFORMATIONAL" || normSev === "INFO") ? "badge-info" : `badge-${normSev.toLowerCase()}`;
-    const precision = f.location_precision || "APPROXIMATE";
+    const info = this._engineInfo(f.category);
+    const affected = this._affectedText(f);
+    const review = this.getReviewState(f.finding_id);
+    const sev = String(f.severity || "Low");
+    const fIdx = this.filteredFindings.findIndex((x) => x.finding_id === f.finding_id);
+    const pos = fIdx >= 0 ? `${fIdx + 1} / ${this.filteredFindings.length}` : "";
+    const sevCls = /critical/i.test(sev) ? "badge-critical" : "";
 
-    // Finding Index Number
-    const fIdx = this.allFindings.findIndex((x) => x.finding_id === f.finding_id);
-    const findingNum = fIdx >= 0 ? (fIdx + 1).toString().padStart(2, "0") : "01";
+    const statusBanner = review && review.status === "approved"
+      ? `<div class="review-status-banner review-approved">Approved — resolved as-is</div>`
+      : review && review.status === "edited"
+      ? `<div class="review-status-banner review-edited">Updated — resolved</div>`
+      : review && review.status === "skipped"
+      ? `<div class="review-status-banner review-skipped">Skipped — revisit anytime</div>`
+      : "";
 
-    // Multi-Locations Support (Section 15)
-    let multiLocationsHtml = "";
-    if (f.locations && f.locations.length > 1) {
-      const locButtons = f.locations.map((loc, idx) => {
-        return `
-          <button class="multi-location-btn" onclick="window.FindingsView.goToLocation(${loc.page})">
-            📍 ${escapeHtml(loc.label || `Location ${idx + 1} (Page ${loc.page})`)}
-          </button>
-        `;
-      }).join("");
-
-      multiLocationsHtml = `
-        <div class="multi-locations-box">
-          <div class="multi-locations-title">LOCATIONS INVOLVED (CLICK TO NAVIGATE)</div>
-          <div class="multi-locations-btn-group">
-            ${locButtons}
-          </div>
+    const editBlock = this._editMode ? `
+      <div class="review-edit-block">
+        <label class="review-field-label" for="review-edit-input">Corrected value</label>
+        <input id="review-edit-input" class="form-input review-edit-input" type="text"
+          value="${escapeHtml(String(review && review.value ? review.value : affected))}" />
+        <div class="review-edit-row">
+          <button class="btn btn-primary btn-sm" onclick="window.FindingsView.saveEditedValue('${f.finding_id}')">Save Value</button>
+          <button class="btn btn-secondary btn-sm" onclick="window.FindingsView.toggleEditMode('${f.finding_id}')">Cancel</button>
         </div>
-      `;
-    }
-
-    // Missing Content Alert (Section 14)
-    let missingContentHtml = "";
-    const isMissing = !f.bbox || (f.issue_type && f.issue_type.includes("MISSING"));
-    if (isMissing) {
-      missingContentHtml = `
-        <div class="missing-content-alert">
-          <div class="missing-alert-header">
-            <span>⚠</span>
-            <span>EXPECTED CONTENT NOT FOUND</span>
-          </div>
-          <div class="missing-alert-target">
-            ${escapeHtml(String(f.expected_value || f.expected_text || f.finding_id))}
-          </div>
-          <div class="missing-alert-note">
-            Expected object not detected here. Exact visual coordinates unavailable.
-          </div>
-        </div>
-      `;
-    }
-
-    // Detected & Expected formatting blocks (Section 8, 9, 10)
-    const detectedVal = String(f.detected_value || f.matched_text || f.original_content || "N/A");
-    const expectedVal = String(f.expected_value || f.expected_text || "Conforming specification standard");
+      </div>
+    ` : "";
 
     col.innerHTML = `
-      <!-- Header: Finding Code & Navigation -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border-default); padding-bottom: 10px;">
-        <div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="finding-code-id" style="font-size: 17px; color: var(--accent-primary);">[${findingNum}] ${escapeHtml(f.finding_id)}</span>
-            <span class="badge ${sevClass}">${f.severity}</span>
-          </div>
-          <div style="font-size: 12.5px; font-weight: 700; color: var(--text-secondary); margin-top: 2px;">
-            ${escapeHtml(f.category)} ${f.issue_type ? `• ${escapeHtml(f.issue_type)}` : ''}
-          </div>
+      ${statusBanner}
+      <div class="review-card">
+        <div class="review-card-top">
+          <span style="font-size: 13px; font-weight: 800;">${escapeHtml(f.finding_id || "")}</span>
+          <span class="badge ${sevCls}">${escapeHtml(sev)}</span>
         </div>
-        <div style="display: flex; gap: 4px;">
-          <button class="btn btn-secondary btn-sm" onclick="window.FindingsView.prevFinding()" title="Previous Finding">←</button>
-          <button class="btn btn-secondary btn-sm" onclick="window.FindingsView.nextFinding()" title="Next Finding">→</button>
-        </div>
-      </div>
-
-      <!-- PRIMARY ACTION: SHOW IN DOCUMENT (Section 17) -->
-      <button class="btn-show-in-doc" onclick="window.FindingsView.showInDocument()">
-        <span>👁️</span>
-        <span>SHOW IN DOCUMENT</span>
-      </button>
-
-      <!-- SECTION 7: DEDICATED DEFECT LOCATION CARD -->
-      <div class="defect-location-card">
-        <div class="defect-location-title">
-          <span>📍</span>
-          <span>DEFECT LOCATION</span>
-        </div>
-        <div class="defect-location-grid">
-          <div class="defect-location-row">
-            <span class="defect-location-label">Page:</span>
-            <span class="defect-location-value">${f.page_number || f.page || "Not available"}</span>
-          </div>
-          <div class="defect-location-row">
-            <span class="defect-location-label">Section:</span>
-            <span class="defect-location-value">${escapeHtml(f.section || "Not available")}</span>
-          </div>
-          <div class="defect-location-row">
-            <span class="defect-location-label">Paragraph:</span>
-            <span class="defect-location-value">${escapeHtml(f.paragraph || "Not available")}</span>
-          </div>
-          <div class="defect-location-row">
-            <span class="defect-location-label">Object:</span>
-            <span class="defect-location-value">${escapeHtml(f.object_type || "Not available")}</span>
-          </div>
-          <div class="defect-location-region">
-            <span style="font-weight: 700; color: var(--text-muted); margin-right: 4px;">Region:</span>
-            <code>${escapeHtml(f.region_formatted || "Exact visual coordinates unavailable")}</code>
-          </div>
-        </div>
-      </div>
-
-      <!-- Multiple Locations Breakdown (if applicable) -->
-      ${multiLocationsHtml}
-
-      <!-- Missing Content Warning (if applicable) -->
-      ${missingContentHtml}
-
-      <!-- WHAT IS WRONG / PROBLEM -->
-      <div class="inspection-section">
-        <span class="inspection-section-label">WHAT IS WRONG</span>
-        <div class="inspection-explanation-text" style="font-weight: 600;">
-          ${escapeHtml(f.explanation || f.message || "Defect detected in document content or styling.")}
-        </div>
-      </div>
-
-      <!-- DETECTED CONTENT vs EXPECTED VALUE (Section 8, 9, 10) -->
-      <div class="inspection-comparison-grid">
-        <div class="comparison-box detected">
-          <span class="comparison-label">CURRENT / DETECTED</span>
-          <div class="comparison-value">${escapeHtml(detectedVal)}</div>
-        </div>
-        <div class="comparison-box expected">
-          <span class="comparison-label">EXPECTED SPECIFICATION</span>
-          <div class="comparison-value">${escapeHtml(expectedVal)}</div>
-        </div>
-      </div>
-
-      <!-- WHY THIS FAILED / EXPLANATION -->
-      <div class="inspection-section">
-        <span class="inspection-section-label">WHY THIS FAILED</span>
-        <div class="inspection-explanation-text">
-          ${escapeHtml(f.explanation || "Does not conform to the required engineering specifications or design guidelines.")}
-        </div>
-      </div>
-
-      <!-- SUGGESTED ACTION (Informational Only - Section 9) -->
-      <div class="inspection-remediation-box">
-        <div class="remediation-notice">Suggested Action (Information Only)</div>
-        <div class="remediation-guidance">
-          💡 ${escapeHtml(f.suggested_correction || f.suggested_fix || "Review the discrepancy and correct it in your original source document.")}
-        </div>
-      </div>
-
-      <!-- TECHNICAL METADATA -->
-      <div class="inspection-meta-grid">
-        <div class="meta-item">
-          <span class="meta-item-label">Rule / Standard</span>
-          <span class="meta-item-val">${escapeHtml(f.rule_reference || f.rule_id || "SpecGuard Core Rules")}</span>
-        </div>
-        <div class="meta-item">
-          <span class="meta-item-label">Analyzer Engine</span>
-          <span class="meta-item-val">${escapeHtml(f.source_analyzer || "Inspection Engine")}</span>
-        </div>
-        <div class="meta-item">
-          <span class="meta-item-label">Location Precision</span>
-          <span class="meta-item-val">${escapeHtml(precision)}</span>
-        </div>
-        <div class="meta-item">
-          <span class="meta-item-label">Confidence Score</span>
-          <span class="meta-item-val">${Math.round((f.confidence || 1.0) * 100)}%</span>
+        <div class="review-pos">${escapeHtml(pos)}</div>
+        <div class="review-error-type">${info.icon} ${escapeHtml(info.label)}</div>
+        <div class="review-engine">Page ${escapeHtml(String(f.page_number || f.page || 1))}</div>
+        <div class="review-field-label">Affected text</div>
+        <div class="review-affected-text">${escapeHtml(String(affected))}</div>
+        ${editBlock}
+        <div class="review-actions">
+          <button class="btn btn-primary review-btn-approve" onclick="window.FindingsView.approveFinding('${f.finding_id}')">Approve</button>
+          <button class="btn btn-secondary review-btn-edit" onclick="window.FindingsView.toggleEditMode('${f.finding_id}')">${this._editMode ? "Editing…" : "Edit / Change Value"}</button>
+          <button class="btn btn-secondary review-btn-skip" onclick="window.FindingsView.skipFinding('${f.finding_id}')">Skip / Next</button>
         </div>
       </div>
     `;
+
+    const editInput = document.getElementById("review-edit-input");
+    if (editInput) {
+      editInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); this.saveEditedValue(f.finding_id); }
+        if (e.key === "Escape") { this.toggleEditMode(f.finding_id); }
+      });
+    }
   },
 
   renderTableView() {
@@ -827,11 +920,13 @@ window.FindingsView = {
       const num = (idx + 1).toString().padStart(2, "0");
       const isSelected = this.selectedFinding && this.selectedFinding.finding_id === f.finding_id;
       const issueSummary = f.explanation || f.original_content || f.detected_value || "Issue detected";
+      const resolved = this.isResolved(f.finding_id);
+      const review = this.getReviewState(f.finding_id);
 
       return `
-        <tr class="${isSelected ? 'selected' : ''}" data-finding-id="${f.finding_id}" onclick="window.FindingsView.selectFinding('${f.finding_id}'); window.FindingsView.setViewMode('coordinated');" style="cursor: pointer;">
+        <tr class="${isSelected ? 'selected' : ''}" data-finding-id="${f.finding_id}" onclick="window.FindingsView.selectFinding('${f.finding_id}'); window.FindingsView.setViewMode('coordinated');" style="cursor: pointer; ${resolved ? 'opacity: 0.62;' : ''}">
           <td><span class="badge badge-outline" style="font-size: 10px;">${num}</span></td>
-          <td><strong class="finding-code-id" style="font-size: 12.5px;">${escapeHtml(f.finding_id)}</strong></td>
+          <td><strong class="finding-code-id" style="font-size: 12.5px;">${escapeHtml(f.finding_id)}</strong>${resolved ? ' <span class="badge badge-success" style="font-size: 9px;">✓</span>' : ''}${review && review.status === "skipped" ? ' <span class="badge badge-outline" style="font-size: 9px;">⏭</span>' : ''}</td>
           <td><span class="badge ${sevClass}">${f.severity}</span></td>
           <td><span style="font-weight: 600;">${escapeHtml(f.category)}</span></td>
           <td>Page ${f.page_number || f.page}</td>

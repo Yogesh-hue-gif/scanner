@@ -136,6 +136,104 @@ def test_js_component_features():
     assert "_isProgrammaticScroll" in viewer_js
 
 
+def test_js_syntax_valid():
+    """Test 8: Verify all shipped front-end JS files parse without syntax errors.
+
+    The review-card refactor introduced a stray closing brace in findings.js that
+    broke the ENTIRE Findings view at runtime (the browser refuses to execute
+    the file). The other assertions in this module are string-matching only and
+    happily passed against the broken file, so an explicit parse check is
+    required to catch this class of regression.
+    """
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node executable not available; skipping JS syntax validation.")
+
+    js_root = Path("specguard/web/static/js")
+    js_files = sorted(js_root.rglob("*.js"))
+    assert js_files, "Expected front-end JS assets under specguard/web/static/js."
+
+    failures = []
+    for js_file in js_files:
+        proc = subprocess.run(
+            [node, "--check", str(js_file)],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            failures.append(f"{js_file}:\n{proc.stderr.strip()}")
+
+    assert not failures, "JavaScript syntax errors detected:\n\n" + "\n\n".join(failures)
+
+
+def test_review_card_refactor():
+    """Test 6: Verify minimal review card (Approve/Edit/Skip) replaced dense technical blocks."""
+    viewer_js = Path("specguard/web/static/js/components/document_viewer.js").read_text(encoding="utf-8")
+
+    # Simplified review card with three action controls
+    assert "_reviewCardHtml" in viewer_js
+    assert "approveFinding" in viewer_js
+    assert "saveEditedValue" in viewer_js
+    assert "skipFinding" in viewer_js
+    assert 'data-review-action="approve"' in viewer_js
+    assert 'data-review-action="skip"' in viewer_js
+    assert "review-edit-input" in viewer_js
+
+    # Engine-specific categorization preserved (TOC, Structure, Table, Equation...)
+    assert "engineCategoryInfo" in viewer_js
+    assert "TOC Error" in viewer_js
+    assert "Table Analyzer" in viewer_js
+    assert "Equation Analyzer" in viewer_js
+
+    # Dense technical blocks removed from the drawer template
+    assert "finding-prop-label\">Deviation Magnitude" not in viewer_js
+    assert "finding-prop-label\">Technical Explanation" not in viewer_js
+    assert "finding-prop-label\">Source Engine Metadata" not in viewer_js
+    assert "finding-prop-label\">Engineering Standard Reference" not in viewer_js
+
+    # Interactive hover & jump: click scrolls + highlights exact canvas box
+    assert "defect-hover" in viewer_js
+    # Auto-advance after Approve/Edit resolves the finding
+    assert "_nextPendingFinding" in viewer_js
+    assert "review-row" in viewer_js
+
+    views_css = Path("specguard/web/static/css/views.css").read_text(encoding="utf-8")
+    assert ".review-card" in views_css
+    assert ".review-actions" in views_css
+    assert ".review-row" in views_css
+
+
+def test_finding_details_panel_slim():
+    """Test 7: Verify FindingsView FindingDetailsPanel renders ONLY the slim review card."""
+    findings_js = Path("specguard/web/static/js/views/findings.js").read_text(encoding="utf-8")
+
+    # Header (error type/category + ID), affected text box, 3 action buttons
+    assert "renderFindingDetail" in findings_js
+    assert "review-error-type" in findings_js
+    assert "review-affected-text" in findings_js
+    assert "review-btn-approve" in findings_js
+    assert "review-btn-edit" in findings_js
+    assert "review-btn-skip" in findings_js
+    assert "window.FindingsView.approveFinding" in findings_js
+    assert "window.FindingsView.saveEditedValue" in findings_js
+    assert "window.FindingsView.skipFinding" in findings_js
+    assert "review-edit-input" in findings_js
+
+    # Verbose metadata blocks must be gone from the rendered panel template
+    # (scoped to renderFindingDetail body so toolbar titles/comments pass)
+    detail_body = findings_js.split("renderFindingDetail(f) {", 1)[1].split("renderTableView()", 1)[0]
+    assert "Suggested Action (Information Only)" not in detail_body
+    assert "inspection-meta-grid" not in detail_body
+    assert "WHAT IS WRONG" not in detail_body
+    assert "WHY THIS FAILED" not in detail_body
+    assert "defect-location-grid" not in detail_body
+    assert "CURRENT / DETECTED" not in detail_body
+    assert "EXPECTED SPECIFICATION" not in detail_body
+
+
 def test_document_immutability():
     """Test 5: Verify original document is never mutated by viewing or layout fixes."""
     sample_files = list(Path("demo_samples").glob("*.pdf"))

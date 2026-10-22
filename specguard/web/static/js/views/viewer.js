@@ -99,24 +99,24 @@ window.ViewerView = {
     const domain = window.appState.get("activeDomain") || "Mechanical";
 
     container.innerHTML = `
-      <div class="viewer-shell" style="display: flex; flex-direction: column; height: 100%; gap: 10px; min-height: 0; flex: 1 1 auto;">
+      <div class="viewer-shell" style="display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; max-height: 100%; gap: 10px; width: 100%; max-width: 100%; overflow: hidden; box-sizing: border-box;">
         <!-- Top Viewer Control Bar -->
-        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-surface); padding: 8px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-md); flex-shrink: 0;">
-          <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; background: var(--bg-surface); padding: 8px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-md); flex-shrink: 0; max-width: 100%; box-sizing: border-box;">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0;">
             <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('results')">
               ← Results
             </button>
             <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('overview')">
               📑 Overview
             </button>
-            <span style="font-size: 13px; font-weight: 800; color: var(--text-primary);">${escapeHtml(docName)}</span>
+            <span style="font-size: 13px; font-weight: 800; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw;">${escapeHtml(docName)}</span>
             <span class="badge badge-domain" style="text-transform: capitalize;">${escapeHtml(domain)}</span>
             <span class="badge" style="background: rgba(37, 99, 235, 0.1); color: var(--accent-primary); border: 1px solid rgba(37, 99, 235, 0.25);">
               Read-Only Inspection
             </span>
           </div>
 
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <button class="btn btn-secondary btn-sm" onclick="window.router.navigate('findings')">
               📋 Document Findings (${findings.length})
             </button>
@@ -126,12 +126,18 @@ window.ViewerView = {
           </div>
         </div>
 
-        <!-- Document Viewer Mount Point -->
-        <div id="viewer-mount-point" style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;"></div>
+        <!-- Document Viewer Mount Point: fills remaining shell height so the
+             canvas viewport can measure clientWidth/Height for Fit scaling.
+             flex:1 + min-height:0 gives the canvas a bounded height to scroll. -->
+        <div id="viewer-mount-point" style="flex: 1 1 auto; min-height: 0; max-height: 100%; min-width: 0; max-width: 100%; display: flex; flex-direction: column; overflow: hidden;"></div>
       </div>
     `;
 
-    // Instantiate viewer component
+    // Tear down any previous viewer (removes its window resize listener).
+    if (this.viewerInstance && typeof this.viewerInstance.destroy === "function") {
+      try { this.viewerInstance.destroy(); } catch (_) {}
+    }
+    // Instantiate viewer component (defaults to Fit-Width auto-scale).
     this.viewerInstance = new window.DocumentViewerComponent("viewer-mount-point");
     window.currentViewer = this.viewerInstance;
     await this.viewerInstance.loadDocument(docId, pageCount, findings);

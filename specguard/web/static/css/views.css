@@ -257,17 +257,29 @@
 }
 
 /* --- VIEW: Document Viewer & Side-by-Side Canvas --- */
+/* Flex row shell: sidebar (fixed) + center pane (flexible) + drawer (fixed).
+   IMPORTANT: no height:100% anywhere in this flex chain — percentage heights
+   against indefinite flex parents resolve to content height, which makes the
+   layout grow to full page-stack height and cuts off bottom pages. Each level
+   uses flex:1 + min-height:0 + max-height:100% so the canvas viewport gets a
+   bounded height and owns the scroll. Outer uses overflow:hidden; inner
+   canvas viewport owns the scroll. */
 .viewer-layout {
   display: flex;
-  height: 100%;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: 100%;
   width: 100%;
+  max-width: 100%;
   overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background-color: var(--bg-surface);
-  min-height: 0;
   min-width: 0;
-  flex: 1 1 auto;
+  box-sizing: border-box;
 }
 
 .viewer-pages-sidebar {
@@ -278,6 +290,8 @@
   flex-direction: column;
   flex-shrink: 0;
   min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .pages-sidebar-header {
@@ -296,7 +310,9 @@
   gap: 6px;
   padding: 10px 8px;
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .page-thumb-item {
@@ -330,7 +346,12 @@
   overflow: hidden;
   position: relative;
   min-height: 0;
+  /* Critical: allow the center pane to shrink inside the flex row so the
+     canvas viewport can scroll instead of pushing pages off-screen. */
   min-width: 0;
+  max-width: 100%;
+  max-height: 100%;
+  width: 0; /* flex-basis 0 + flex-grow 1 => fills space yet stays shrinkable */
 }
 
 .viewer-toolbar {
@@ -344,21 +365,38 @@
   padding: 6px 14px;
   flex-shrink: 0;
   gap: 8px;
+  flex-wrap: wrap; /* wrap controls on narrow panes instead of clipping */
   z-index: 10;
 }
 
-/* Document Viewport - The Dedicated Scroll Container (Sections 3, 4, 18) */
+/* Document Viewport - The Dedicated Scroll Container.
+   INDEPENDENT SCROLL REGION: this is the ONLY element in the viewer chain
+   with scroll overflow. Bounded via flex:1 + min-height:0 + max-height:100%
+   from the ancestor flex chain (view-container -> viewer-shell -> mount ->
+   viewer-layout -> center-pane), so all stacked pages (Page 1, 2, ...) flow
+   vertically inside it and every page is reachable via scroll. Bottom padding
+   + scroll-padding keep the final page clear of the status bar; spacer div
+   at the end of the page stack provides extra clearance. */
 .document-viewport,
 .canvas-viewport {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+  height: auto;
   overflow: auto;
+  overflow-y: auto;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scroll-padding-bottom: 96px;
   background-color: #cbd5e1;
   position: relative;
-  padding: 24px 16px;
+  padding: 24px 16px 120px 16px; /* generous bottom pad clears status bar */
   box-sizing: border-box;
-  display: block; /* Avoids flexbox center scroll clipping traps (Section 4 & 5) */
+  display: block; /* Avoids flexbox center scroll clipping traps */
+  /* Allow the pane to shrink below content size so scrollbars appear
+     instead of clipping the page on narrow viewports. */
+  max-width: 100%;
+  max-height: 100%;
 }
 
 [data-theme="dark"] .document-viewport,
@@ -366,24 +404,31 @@
   background-color: #090e1a;
 }
 
-/* Continuous Multi-Page Container (Section 13) */
+/* Continuous Multi-Page Container — block + margin-auto centering.
+   Uses block layout (NOT flex align-items:center) so wide zoomed pages
+   overflow to the right with a working scrollbar instead of clipping the
+   left edge (classic flexbox center scroll trap). Content height is
+   unbounded here on purpose: the PARENT .document-viewport scrolls. */
 .document-pages-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 28px;
-  margin: 0 auto;
+  display: block;
   width: fit-content;
-  min-width: min-content;
-  padding-bottom: 48px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding-bottom: 64px; /* spacer so last page clears status bar */
+  box-sizing: border-box;
+  min-width: 0;
+  height: auto;
+  max-height: none;
+  overflow: visible;
 }
 
-/* Individual Page Container (Section 11) */
+/* Individual Page Container — block layout with margin-auto so each page
+   stays centered yet scrollable; bottom margin replaces container gap. */
 .document-page-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
+  display: block;
+  margin: 0 auto 28px auto;
+  width: fit-content;
+  max-width: 100%;
   position: relative;
 }
 
@@ -395,10 +440,14 @@
   user-select: none;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  margin-bottom: 8px;
 }
 
-/* Page Canvas Wrapper (Section 6, 12, 15) */
+/* Page Canvas Wrapper — explicit pixel size set from JS (natural * zoom).
+   max-width:100% + height:auto keeps full pages visible when the zoom math
+   runs before the pane reaches final size; margins center the page. */
 .document-page-wrapper,
 .page-canvas-wrapper {
   position: relative;
@@ -409,13 +458,35 @@
   user-select: none;
   flex-shrink: 0;
   border-radius: 2px;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .page-canvas-image {
   display: block;
   user-select: none;
-  max-width: none;
+  max-width: 100%;
+  width: 100%;
   height: auto;
+}
+
+/* Small panes: collapse side panels to overlays so the canvas keeps full
+   width; sidebar/drawer toggle normally on desktop. */
+@media (max-width: 900px) {
+  .viewer-pages-sidebar {
+    width: 120px;
+  }
+  .viewer-detail-drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    box-shadow: var(--shadow-lg);
+    max-width: 85vw;
+  }
 }
 
 .page-overlay-svg {
@@ -506,6 +577,201 @@
   animation: defectPulseAnimation 0.8s ease-in-out 3;
 }
 
+/* Hover/jump emphasis for the focused finding box on the canvas page. */
+.defect-group-marker.defect-hover .defect-focus-ring {
+  opacity: 1;
+  stroke-width: 3;
+}
+
+.defect-group-marker.defect-hover .defect-box {
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 6px rgba(37, 99, 235, 0.8));
+}
+
+/* ---------- Minimal Review Card (right-hand finding panel) ---------- */
+.review-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.review-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-pos {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.review-error-type {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.review-engine {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.review-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.review-affected-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.review-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.review-btn-approve,
+.review-btn-edit,
+.review-btn-skip {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.review-status-banner {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+
+.review-approved,
+.review-edited {
+  background: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.35);
+}
+
+.review-skipped {
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--sev-medium);
+  border: 1px solid rgba(217, 119, 6, 0.3);
+}
+
+.review-edit-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-edit-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+}
+
+.review-edit-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---------- Review queue rows (left sidebar "Review" tab) ---------- */
+.review-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+  margin-bottom: 3px;
+}
+
+.review-row:hover {
+  background: var(--bg-surface-elevated);
+  border-color: var(--border-subtle);
+}
+
+.review-row.active {
+  background: var(--accent-light);
+  border-color: var(--accent-primary);
+}
+
+.review-row.resolved {
+  opacity: 0.62;
+}
+
+.review-row-status {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--bg-surface-sunken);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.review-row.resolved .review-row-status {
+  background: rgba(22, 163, 74, 0.15);
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.review-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.review-row-id {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+
+.review-row-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .active-defect-pulse {
   animation: strokeDashPulse 1.2s linear infinite;
 }
@@ -594,6 +860,9 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
   transition: width var(--transition-normal);
 }
 
@@ -610,9 +879,11 @@
 }
 
 .drawer-content {
-  padding: 16px;
+  padding: 16px 16px 32px 16px;
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   gap: 14px;
